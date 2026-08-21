@@ -1,0 +1,73 @@
+Generating an IELTS Listening test (IELTS 7.0, band 7.0) with meta/muse-glimmer-30b
+
+Blueprint ...
+    [blueprint] 17.8s, 3461 chars
+Part 1 ...
+    [part1] 215.9s, 10427 chars
+    local checks passed
+Part 2 ...
+    [part2] 176.5s, 7984 chars
+    1 local error(s) - requesting a repair
+      - visual v1 says it needs custom HTML/SVG but also supplies Mermaid code. Section 15 forbids pretending Mermaid can draw it: either write Mermaid that genuinely represents the layout (and clear implementation_note), or keep the note and set mermaid to ""
+    [repair:p2] 53.1s, 8942 chars
+    repair clean
+Part 3 ...
+    [part3] 570.2s, 12892 chars
+    1 local error(s) - requesting a repair
+      - Q30: answer '3 March 2026' appears in the transcript out of order (it is spoken before an earlier question's answer)
+    [repair:p3] 160.6s, 9290 chars
+    still 1 error(s) after repair - continuing anyway
+Part 4 ...
+    [part4] 289.3s, 14566 chars
+    local checks passed
+
+LLM verification agent ...
+  verifying part 1 ...
+    [verify:solve:p1] 7.6s, 1261 chars
+    [verify:audit:p1] 13.9s, 749 chars
+    2 question(s) flagged - repairing
+    [verify:repair:p1] 147.5s, 8864 chars
+    [verify:solve:p1] 4.7s, 1338 chars
+    [verify:audit:p1] 11.8s, 605 chars
+    1 question(s) still flagged after repair
+  verifying part 2 ...
+    [verify:solve:p2] 30.1s, 1795 chars
+    [verify:audit:p2] 27.2s, 542 chars
+    1 question(s) flagged - repairing
+    [verify:repair:p2] 49.0s, 8880 chars
+    [verify:solve:p2] 26.1s, 1772 chars
+    [verify:audit:p2] 27.3s, 542 chars
+    5 question(s) still flagged after repair
+  verifying part 3 ...
+    [verify:solve:p3] 5.4s, 1820 chars
+    [verify:audit:p3] 22.0s, 542 chars
+  verifying part 4 ...
+    [verify:solve:p4] 28.6s, 2119 chars
+    [verify:audit:p4] 23.2s, 665 chars
+    1 question(s) flagged - repairing
+    [verify:repair:p4] 91.9s, 15695 chars
+    [verify:solve:p4] 50.3s, 2028 chars
+    [verify:audit:p4] 58.5s, 542 chars
+    2 question(s) still flagged after repair
+
+==============================================================
+IELTS Listening Practice Test - Academic 7.0
+==============================================================
+Output      : D:\Asad\Projects\AI IELTS\tests\test_002
+Files       : test.json, student_paper.md, transcript.txt, answer_key.md, visuals.md
+Model       : meta/muse-glimmer-30b  (24 API calls)
+Local checks: 1 error(s), 1 warning(s)
+Repaired    : part(s) 2, 3
+UNRESOLVED  : part(s) 3 still have local errors
+Blind solve : 38/40 solved
+Clean       : 32/40 questions passed both verifier passes
+Flagged     : Q7, Q16, Q17, Q18, Q19, Q20, Q34, Q37
+   Q7   Question asks for number of books but transcript states number of items.
+   Q16  verifier was not confident the answer is determinable
+   Q17  verifier was not confident the answer is determinable
+   Q18  verifier was not confident the answer is determinable
+   Q19  verifier was not confident the answer is determinable
+   Q20  verifier was not confident the answer is determinable
+   Q34  blind solve produced 'heat trapped' but the key says 'anthropogenic heat'
+   Q37  blind solve produced '15 degrees Celsius' but the key says '15 degrees'
+==============================================================

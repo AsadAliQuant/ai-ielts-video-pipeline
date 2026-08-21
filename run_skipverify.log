@@ -1,0 +1,28 @@
+Generating an IELTS Listening test (IELTS 7.0, band 7.0) with meta/muse-glimmer-30b
+
+Blueprint ...
+    [blueprint] 19.8s, 3519 chars
+Part 1 ...
+    [part1] 59.3s, 8056 chars
+    local checks passed
+Part 2 ...
+    [part2] 96.8s, 5568 chars
+    local checks passed
+Part 3 ...
+    [part3] 201.9s, 8503 chars
+    local checks passed
+Part 4 ...
+    [part4] 186.4s, 8610 chars
+    local checks passed
+
+Skipping LLM verification (--skip-verify)
+
+==============================================================
+IELTS Listening Practice Test - Academic 7.0
+==============================================================
+Output      : D:\Asad\Projects\AI IELTS\tests\test_001
+Files       : test.json, student_paper.md, transcript.txt, answer_key.md, visuals.md
+Model       : meta/muse-glimmer-30b  (5 API calls)
+Local checks: 0 error(s), 3 warning(s)
+Verifier    : skipped (--skip-verify)
+==============================================================

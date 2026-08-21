@@ -1,0 +1,41 @@
+Generating an IELTS Listening test (IELTS 7.0, band 7.0) with meta/muse-glimmer-30b
+
+Blueprint ...
+    [blueprint] 21.4s, 3336 chars
+Part 1 ...
+    [part1] 254.9s, 10117 chars
+    1 local error(s) - requesting a repair
+      - Q6: answer '4 pm' never appears in the part 1 transcript
+    [repair:p1] 50.5s, 10119 chars
+    repair did not reduce the error count (1 -> 3) - keeping the original part
+    still 1 error(s) after repair - continuing anyway
+Part 2 ...
+    [part2] 243.7s, 10133 chars
+    2 local error(s) - requesting a repair
+      - Q15: answer 'Sundays' appears in the transcript out of order (it is spoken before an earlier question's answer)
+      - Q20: answer 'Bike Repair Station' has 3 words but the instruction allows 2
+    [repair:p2] 86.1s, 11168 chars
+    repair clean
+Part 3 ...
+    [part3] 867.0s, 14542 chars
+    local checks passed
+Part 4 ...
+    [part4] 535.1s, 11266 chars
+    local checks passed
+
+LLM verification agent ...
+  verifying part 1 ...
+    [verify:solve:p1] 20.0s, 1374 chars
+    [verify:audit:p1] 95.7s, 746 chars
+    3 question(s) flagged - repairing
+    [verify:repair:p1] 281.4s, 10123 chars
+    repaired part fails 3 local check(s) - re-verifying it before deciding whether to keep it
+    [verify:solve:p1] 33.3s, 1380 chars
+    [verify:audit:p1] 69.7s, 533 chars
+    repair rejected (3 flagged before, 0 after, plus new local errors) - keeping the original part
+  verifying part 2 ...
+    [verify:solve:p2] 110.4s, 1763 chars
+    [verify:audit:p2] 152.1s, 810 chars
+    2 question(s) flagged - repairing
+    [verify:repair:p2] 188.1s, 11207 chars
+    [verify:solve:p2] 3947.3s, 1888 chars

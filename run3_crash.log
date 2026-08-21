@@ -1,0 +1,41 @@
+Generating an IELTS Listening test (IELTS 7.0, band 7.0) with meta/muse-glimmer-30b
+
+Blueprint ...
+    [blueprint] 71.4s, 2847 chars
+    ! invalid JSON (Expecting ',' delimiter: line 97 column 6 (char 2681)) - asking the model to repair it
+    [blueprint:json-fix] 183.1s, 0 chars
+Traceback (most recent call last):
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 192, in json_call
+    return extract_json(raw)
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 115, in extract_json
+    return json.loads(text[start:end + 1])
+           ~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\json\__init__.py", line 352, in loads
+    return _default_decoder.decode(s)
+           ~~~~~~~~~~~~~~~~~~~~~~~^^^
+  File "C:\Python314\Lib\json\decoder.py", line 345, in decode
+    obj, end = self.raw_decode(s, idx=_w(s, 0).end())
+               ~~~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^
+  File "C:\Python314\Lib\json\decoder.py", line 361, in raw_decode
+    obj, end = self.scan_once(s, idx)
+               ~~~~~~~~~~~~~~^^^^^^^^
+json.decoder.JSONDecodeError: Expecting ',' delimiter: line 97 column 6 (char 2681)
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 1297, in <module>
+    sys.exit(main())
+             ~~~~^^
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 1273, in main
+    test = build_test(llm, system, args)
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 1131, in build_test
+    blueprint = generate_blueprint(llm, system, args)
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 404, in generate_blueprint
+    return llm.json_call(system, user, max_tokens=2500, label="blueprint")
+           ~~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 205, in json_call
+    return extract_json(fixed)
+  File "D:\Asad\Projects\AI IELTS\generate_test.py", line 116, in extract_json
+    raise json.JSONDecodeError("no JSON object found", text[:200] or " ", 0)
+json.decoder.JSONDecodeError: no JSON object found: line 1 column 1 (char 0)
