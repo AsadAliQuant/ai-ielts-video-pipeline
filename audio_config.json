@@ -1,0 +1,99 @@
+{
+  "model": "s2.1-pro-free",
+  "format": "wav",
+  "sample_rate": 44100,
+  "mp3_bitrate": 192,
+
+  "narrator": {
+    "voice_id": "8906b5268cae414fb9b8d3da6e84413d",
+    "temperature": 0.3,
+    "top_p": 0.7,
+    "speed": 0.92,
+    "note": "Neutral, professional IELTS narrator. Low temperature for consistency."
+  },
+
+  "speaker_defaults": {
+    "temperature": 0.7,
+    "top_p": 0.7,
+    "speed": 0.95,
+    "note": "Slightly slower than normal speech, matching IELTS exam pace."
+  },
+
+  "speaker_roster": {
+    "narrator":             "8906b5268cae414fb9b8d3da6e84413d",
+    "receptionist_female":  "cdd1e23a5467423389f71b99b4bcd7e8",
+    "guide_female":         "933563129e564b19a115bedd57b7406a",
+    "caller_female":        "c2623f0c075b4492ac367989aee1576f",
+    "lecturer_female":      "b347db033a6549378b48d00acb0d06cd",
+    "student_female_young": "285f205eeb254c6cadc1a567456873ac",
+    "caller_male":          "ac6474da3a324e0c8edf6d796fe59f4d",
+    "lecturer_male":        "c5f56a6cc2ec4fa8920cb4c5889a3fb7",
+    "supervisor_male":      "536d3a5e000945adb7038665781a4aca",
+    "student_male_young":   "fb7ec16ca51a45a5a4db881244d7990a",
+    "student_male_2":       "8867e81f31bc48d591749b1af0ac6fe0"
+  },
+
+  "_voice_labels": {
+    "narrator":             "Measured Storyteller",
+    "receptionist_female":  "Laura",
+    "guide_female":         "Narration",
+    "caller_female":        "Paula",
+    "lecturer_female":      "Selene",
+    "student_female_young": "Sarah",
+    "caller_male":          "Wheatley - Aperture Archive",
+    "lecturer_male":        "Slax (clear/crisp)",
+    "supervisor_male":      "Ethan",
+    "student_male_young":   "WNBA Voiceover",
+    "student_male_2":       "Slax (variant)"
+  },
+
+  "timing": {
+    "intro_pause_sec": 2,
+    "preparation_time_sec": 30,
+    "checking_time_sec": 30,
+    "between_parts_sec": 3,
+    "mid_part_break_sec": 30
+  },
+
+  "narrator_scripts": {
+    "intro": "This is the IELTS Listening test. You will hear four different recordings and you will have to answer questions on what you hear. There will be time for you to read the instructions and questions, and you will have a chance to check your work. You will hear each recording once only. The test is in four parts. At the end of the test, you will be given two minutes to check all of your answers.",
+    "situation": "You will hear {situation}. First, you have some time to look at questions {q_from} to {q_mid}.",
+    "now_listen_first": "Now listen carefully and answer questions {q_from} to {q_mid}.",
+    "mid_break": "Before you hear the rest of the conversation, you have some time to look at questions {q_mid_next} to {q_to}.",
+    "now_listen_rest": "Now listen and answer questions {q_mid_next} to {q_to}.",
+    "end_part": "That is the end of Part {part_number}. You now have half a minute to check your answers.",
+    "turn_to_next": "Now turn to Part {next_part}.",
+    "end_test": "That is the end of the Listening test. You now have ten minutes to transfer your answers to the answer sheet."
+  },
+
+  "speaker_mapping_hints": {
+    "_doc": "Maps keywords found in speaker role/name to a roster key. First match wins. Case-insensitive. You can add new keywords or change the mapping.",
+    "receptionist":     "receptionist_female",
+    "clerk":            "receptionist_female",
+    "staff":            "receptionist_female",
+    "assistant":        "receptionist_female",
+    "agent":            "receptionist_female",
+    "officer":          "receptionist_female",
+    "guide":            "guide_female",
+    "library":          "guide_female",
+    "tour":             "guide_female",
+    "caller":           "caller_female",
+    "customer":         "caller_female",
+    "enquirer":         "caller_female",
+    "member":           "caller_female",
+    "resident":         "caller_male",
+    "applicant":        "caller_male",
+    "supervisor":       "supervisor_male",
+    "tutor":            "supervisor_male",
+    "professor":        "supervisor_male",
+    "lecturer":         "lecturer_male",
+    "speaker":          "lecturer_male",
+    "student a":        "student_male_young",
+    "student 1":        "student_male_young",
+    "student b":        "student_female_young",
+    "student 2":        "student_female_young",
+    "student c":        "student_male_2",
+    "student 3":        "student_male_2",
+    "student":          "student_male_young"
+  }
+}

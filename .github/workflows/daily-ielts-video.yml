@@ -1,0 +1,74 @@
+name: Daily IELTS Video
+
+on:
+  schedule:
+    # 03:00 UTC every day -- edit to taste (cron is always UTC)
+    - cron: "0 3 * * *"
+  workflow_dispatch:
+    inputs:
+      band:
+        description: "Target band"
+        default: "7.0"
+        required: false
+
+jobs:
+  build-and-upload:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Stage 1 - generate test paper
+        env:
+          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+        run: |
+          python -u generate_test.py \
+            --band "${{ github.event.inputs.band || '7.0' }}" \
+            --skip-verify
+
+      - name: Locate generated test dir
+        id: testdir
+        run: |
+          DIR=$(ls -d tests/test_* | sort | tail -n 1)
+          echo "dir=$DIR" >> "$GITHUB_OUTPUT"
+          echo "Generated: $DIR"
+
+      - name: Stage 2 - synthesize audio
+        env:
+          FISH_AUDIO: ${{ secrets.FISH_AUDIO }}
+        run: python generate_audio.py "${{ steps.testdir.outputs.dir }}"
+
+      - name: Stage 3 - render video
+        env:
+          GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
+        run: python generate_video.py "${{ steps.testdir.outputs.dir }}" --fast
+
+      - name: Stage 4 - upload to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY }}
+        run: python youtube_upload.py "${{ steps.testdir.outputs.dir }}"
+
+      - name: Upload run artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-run-${{ github.run_id }}
+          path: ${{ steps.testdir.outputs.dir }}
+          retention-days: 7

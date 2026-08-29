@@ -29,6 +29,8 @@ try:
 except ImportError:
     sys.exit("Missing dependencies. Run:  pip install -r requirements.txt")
 
+from generate_visual import process_test_visuals
+
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL = "deepseek-ai/deepseek-v4-flash-0731"
@@ -78,6 +80,12 @@ def norm(text):
     s = s.lower()
     s = re.sub(r"[^a-z0-9' ]+", " ", s)
     return re.sub(r"\s+", " ", s).strip()
+
+
+def find_phrase(haystack, needle, start=0):
+    """Position of needle in haystack matching at word boundaries only, else -1."""
+    m = re.compile(r"(?<!\S)" + re.escape(needle) + r"(?!\S)").search(haystack, start)
+    return m.start() if m else -1
 
 
 def answer_shape(answer):
@@ -143,6 +151,7 @@ class _Backend:
         self.client = client
         self.model = model
         self.json_mode = True          # switched off automatically if unsupported
+        self.supports_schema = name.startswith("gemini")  # response_format: json_schema
 
 
 def _load_gemini_keys():
@@ -191,7 +200,12 @@ class LLM:
         self.calls = 0
         self.backend_index = 0         # sticks on whichever backend last worked
 
-    def chat(self, system, user, max_tokens=8000, temperature=None, label=""):
+    @property
+    def model(self):
+        return self.backends[self.backend_index].model
+
+    def chat(self, system, user, max_tokens=8000, temperature=None, label="",
+             schema=None, schema_name=""):
         messages = [
             {"role": "system", "content": system},
             {"role": "user", "content": user},
@@ -206,7 +220,12 @@ class LLM:
                     temperature=self.temperature if temperature is None else temperature,
                     max_tokens=max_tokens,
                 )
-                if backend.json_mode:
+                if schema is not None and backend.supports_schema:
+                    kwargs["response_format"] = {
+                        "type": "json_schema",
+                        "json_schema": {"name": schema_name or "response", "schema": schema},
+                    }
+                elif backend.json_mode:
                     kwargs["response_format"] = {"type": "json_object"}
                 try:
                     self.calls += 1
@@ -231,6 +250,13 @@ class LLM:
                 except Exception as exc:                        # noqa: BLE001
                     last_error = exc
                     text = str(exc)
+                    if backend.supports_schema and schema is not None and (
+                            "json_schema" in text or "response_format" in text
+                            or "schema" in text.lower()):
+                        backend.supports_schema = False
+                        print("    ! {} rejects JSON schema mode - falling back to "
+                              "json_object mode".format(backend.name))
+                        continue
                     if backend.json_mode and ("response_format" in text or "json_object" in text):
                         backend.json_mode = False
                         print("    ! {} rejects JSON mode - falling back to plain text".format(
@@ -252,9 +278,11 @@ class LLM:
         raise RuntimeError("API call failed on every backend ({}): {}".format(
             label or "call", last_error))
 
-    def json_call(self, system, user, max_tokens=8000, temperature=None, label=""):
+    def json_call(self, system, user, max_tokens=8000, temperature=None, label="",
+                  schema=None, schema_name=""):
         """Call the model and parse JSON, with bounded repair round-trips on failure."""
-        raw = self.chat(system, user, max_tokens, temperature, label)
+        raw = self.chat(system, user, max_tokens, temperature, label,
+                        schema=schema, schema_name=schema_name)
         try:
             return extract_json(raw)
         except (json.JSONDecodeError, ValueError) as exc:
@@ -271,6 +299,8 @@ class LLM:
                         max_tokens=max_tokens,
                         temperature=0.0,
                         label="{}:json-fix".format(label),
+                        schema=schema,
+                        schema_name=schema_name,
                     )
                     return extract_json(fixed)
                 except (json.JSONDecodeError, ValueError, RuntimeError) as fix_exc:
@@ -449,6 +479,217 @@ Give a verdict for every question number in the range.
 
 
 # --------------------------------------------------------------------------
+# JSON Schemas for Gemini structured output (response_format: json_schema)
+#
+# These mirror the prose *_SCHEMA strings above field-for-field. The prose
+# stays in the prompt for business rules JSON Schema can't express (answers
+# must appear verbatim in the transcript, etc); these dicts are only for
+# structural enforcement via Gemini's constrained decoding, so a Gemini
+# response can no longer come back as malformed or off-shape JSON.
+# --------------------------------------------------------------------------
+
+QUESTION_GROUP_TYPES = [
+    "form_completion", "note_completion", "table_completion",
+    "flow_chart_completion", "sentence_completion", "summary_completion",
+    "short_answer", "multiple_choice", "multiple_response", "matching",
+    "plan_map_labelling", "diagram_labelling",
+]
+
+_OPTION_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "letter": {"type": "string"},
+        "text": {"type": "string"},
+    },
+    "required": ["letter", "text"],
+}
+
+_SPEAKER_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string"},
+        "role": {"type": "string"},
+    },
+    "required": ["name", "role"],
+}
+
+BLUEPRINT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "title": {"type": "string"},
+        "difficulty": {"type": "string"},
+        "target_band": {"type": "string"},
+        "parts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "part": {"type": "integer"},
+                    "topic": {"type": "string"},
+                    "setting": {"type": "string"},
+                    "format": {"type": "string", "enum": ["conversation", "monologue"]},
+                    "speakers": {"type": "array", "items": _SPEAKER_SCHEMA},
+                    "question_groups": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "type": {"type": "string", "enum": QUESTION_GROUP_TYPES},
+                                "from": {"type": "integer"},
+                                "to": {"type": "integer"},
+                                "needs_visual": {"type": "boolean"},
+                                "visual_type": {"type": "string"},
+                            },
+                            "required": ["type", "from", "to", "needs_visual", "visual_type"],
+                        },
+                    },
+                },
+                "required": ["part", "topic", "setting", "format", "speakers", "question_groups"],
+            },
+        },
+    },
+    "required": ["title", "difficulty", "target_band", "parts"],
+}
+
+PART_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "part": {"type": "integer"},
+        "situation": {"type": "string"},
+        "speakers": {"type": "array", "items": _SPEAKER_SCHEMA},
+        "question_groups": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "type": {"type": "string", "enum": QUESTION_GROUP_TYPES},
+                    "from": {"type": "integer"},
+                    "to": {"type": "integer"},
+                    "instruction": {"type": "string"},
+                    "heading": {"type": "string"},
+                    "layout": {"type": "string"},
+                    "options": {"type": "array", "items": _OPTION_SCHEMA},
+                    "visual_id": {"type": "string"},
+                },
+                "required": ["id", "type", "from", "to", "instruction", "heading",
+                             "layout", "options", "visual_id"],
+            },
+        },
+        "questions": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                    "group": {"type": "string"},
+                    "text": {"type": "string"},
+                    "options": {"type": "array", "items": _OPTION_SCHEMA},
+                },
+                "required": ["number", "group", "text", "options"],
+            },
+        },
+        "visuals": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "id": {"type": "string"},
+                    "type": {"type": "string", "enum": [
+                        "map", "floorplan", "flowchart", "timeline", "process", "diagram"]},
+                    "title": {"type": "string"},
+                    "purpose": {"type": "string"},
+                    "mermaid": {"type": "string"},
+                    "image_prompt": {"type": "string"},
+                    "answer_mapping": {
+                        "type": "array",
+                        "items": {
+                            "type": "object",
+                            "properties": {
+                                "number": {"type": "integer"},
+                                "label": {"type": "string"},
+                                "meaning": {"type": "string"},
+                            },
+                            "required": ["number", "label", "meaning"],
+                        },
+                    },
+                    "questions": {"type": "array", "items": {"type": "integer"}},
+                },
+                "required": ["id", "type", "title", "purpose", "mermaid", "image_prompt",
+                             "answer_mapping", "questions"],
+            },
+        },
+        "transcript": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "line": {"type": "string"},
+                },
+                "required": ["speaker", "line"],
+            },
+        },
+        "answers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                    "answer": {"type": "string"},
+                    "alternatives": {"type": "array", "items": {"type": "string"}},
+                    "type": {"type": "string"},
+                    "evidence": {"type": "string"},
+                },
+                "required": ["number", "answer", "alternatives", "type", "evidence"],
+            },
+        },
+    },
+    "required": ["part", "situation", "speakers", "question_groups", "questions",
+                 "visuals", "transcript", "answers"],
+}
+
+BLIND_SOLVE_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "answers": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                    "answer": {"type": "string"},
+                    "confidence": {"type": "string", "enum": ["high", "medium", "low"]},
+                    "reasoning": {"type": "string"},
+                },
+                "required": ["number", "answer", "confidence", "reasoning"],
+            },
+        },
+    },
+    "required": ["answers"],
+}
+
+AUDIT_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "verdicts": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "number": {"type": "integer"},
+                    "verdict": {"type": "string", "enum": ["pass", "fail"]},
+                    "issue": {"type": "string"},
+                },
+                "required": ["number", "verdict", "issue"],
+            },
+        },
+    },
+    "required": ["verdicts"],
+}
+
+
+# --------------------------------------------------------------------------
 # generation
 # --------------------------------------------------------------------------
 
@@ -475,7 +716,8 @@ def generate_blueprint(llm, system, args):
         topics=args.topics or "choose four fresh, unrelated topics yourself",
         schema=BLUEPRINT_SCHEMA,
     )
-    return llm.json_call(system, user, max_tokens=2500, label="blueprint")
+    return llm.json_call(system, user, max_tokens=2500, label="blueprint",
+                         schema=BLUEPRINT_JSON_SCHEMA, schema_name="blueprint")
 
 
 def generate_part(llm, system, blueprint, part_no, args):
@@ -517,7 +759,8 @@ def generate_part(llm, system, blueprint, part_no, args):
         schema=PART_SCHEMA,
     )
     return llm.json_call(system, user, max_tokens=12000,
-                         label="part{}".format(part_no))
+                         label="part{}".format(part_no),
+                         schema=PART_JSON_SCHEMA, schema_name="part")
 
 
 def repair_part(llm, system, part, part_no, problems, label):
@@ -545,7 +788,67 @@ def repair_part(llm, system, part, part_no, problems, label):
         current=current_words, low=low, high=high,
         schema=PART_SCHEMA,
     )
-    return llm.json_call(system, user, max_tokens=12000, temperature=0.3, label=label)
+    return llm.json_call(system, user, max_tokens=12000, temperature=0.3, label=label,
+                         schema=PART_JSON_SCHEMA, schema_name="part")
+
+
+def is_length_error(message):
+    return "transcript is only" in message and "spoken words" in message
+
+
+TRANSCRIPT_EXPANSION_JSON_SCHEMA = {
+    "type": "object",
+    "properties": {
+        "transcript": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "properties": {
+                    "speaker": {"type": "string"},
+                    "line": {"type": "string"},
+                },
+                "required": ["speaker", "line"],
+            },
+        },
+    },
+    "required": ["transcript"],
+}
+
+
+def expand_transcript(llm, system, part, part_no):
+    """Grow a too-short transcript without touching answers, questions or their order."""
+    lo, hi = PART_RANGES[part_no]
+    low, high = TRANSCRIPT_TARGET[part_no]
+    current_words = len(" ".join(str(line.get("line", ""))
+                                 for line in as_list(part.get("transcript"))).split())
+    answers = sorted(as_list(part.get("answers")), key=lambda a: a.get("number", 0))
+    answer_list = [{"number": a.get("number"), "answer": a.get("answer", "")}
+                   for a in answers]
+    user = (
+        "Part {part} of the IELTS Listening test (questions {lo}-{hi}) has a transcript "
+        "that is too short: {current} spoken words, but section 11 requires {low}-{high}.\n\n"
+        "Here is the current transcript:\n{transcript}\n\n"
+        "Here are the answers, in question order. They MUST remain verbatim and in this "
+        "exact order in your expanded transcript:\n{answers}\n\n"
+        "Expand the transcript to {low}-{high} spoken words by adding natural detail: "
+        "hesitations, self-corrections, clarifying questions, asides, and IELTS-style "
+        "distractors. Do NOT remove or reword any of the answers above, do NOT change "
+        "their order, and do NOT add, remove or renumber any question - you are only "
+        "enriching the surrounding dialogue.\n\n"
+        "Return ONLY JSON in exactly this shape:\n"
+        '{{"transcript": [{{"speaker": "<SPEAKER ROLE>", "line": "<a full spoken turn>"}}]}}'
+    ).format(
+        part=part_no, lo=lo, hi=hi, current=current_words, low=low, high=high,
+        transcript=json.dumps(part.get("transcript"), ensure_ascii=False),
+        answers=json.dumps(answer_list, ensure_ascii=False),
+    )
+    result = llm.json_call(system, user, max_tokens=6000, temperature=0.3,
+                           label="expand:p{}".format(part_no),
+                           schema=TRANSCRIPT_EXPANSION_JSON_SCHEMA,
+                           schema_name="transcript_expansion")
+    new_part = dict(part)
+    new_part["transcript"] = result.get("transcript") or part.get("transcript")
+    return new_part
 
 
 # --------------------------------------------------------------------------
@@ -645,6 +948,7 @@ def validate_part(part, part_no):
 
     visuals = {str(v.get("id")): v for v in as_list(part.get("visuals"))}
     cursor = 0
+    written_seen = {}
 
     for answer in answers:
         number = answer.get("number")
@@ -685,9 +989,10 @@ def validate_part(part, part_no):
         if not needle:
             errors.append("Q{}: answer '{}' normalises to nothing".format(number, value))
             continue
-        position = tnorm.find(needle, cursor)
+        written_seen.setdefault(needle, []).append(number)
+        position = find_phrase(tnorm, needle, cursor)
         if position == -1:
-            if tnorm.find(needle) == -1:
+            if find_phrase(tnorm, needle) == -1:
                 errors.append("Q{}: answer '{}' never appears in the part {} transcript"
                               .format(number, value, part_no))
             else:
@@ -706,17 +1011,26 @@ def validate_part(part, part_no):
             errors.append("Q{}: answer '{}' contains a number but the instruction "
                           "does not allow one".format(number, value))
 
-        if len(needle) >= 3 and needle in norm(student_text_of(group, question)):
+        if len(needle) >= 3 and find_phrase(norm(student_text_of(group, question)), needle) != -1:
             errors.append("Q{}: answer '{}' is visible in the student-facing text"
                           .format(number, value))
 
         visual = visuals.get(str(group.get("visual_id") or ""))
-        if visual and len(needle) >= 3 and needle in norm(visual.get("mermaid", "")):
+        if visual and len(needle) >= 3 and find_phrase(norm(visual.get("mermaid", "")), needle) != -1:
             errors.append("Q{}: answer '{}' is printed in the Mermaid code students see"
                           .format(number, value))
-        if visual and len(needle) >= 3 and needle in norm(visual.get("image_prompt", "")):
+        if visual and len(needle) >= 3 and find_phrase(norm(visual.get("image_prompt", "")), needle) != -1:
             errors.append("Q{}: answer '{}' is printed in the image prompt students see"
                           .format(number, value))
+
+    for needle, numbers in written_seen.items():
+        if len(numbers) > 1:
+            first, *rest = numbers
+            for other in rest:
+                errors.append(
+                    "Q{} and Q{} share the answer '{}' - each question must have a "
+                    "distinct answer; rewrite one question so it targets different "
+                    "information".format(first, other, needle))
 
     for group in as_list(part.get("question_groups")):
         gtype = str(group.get("type", ""))
@@ -730,7 +1044,7 @@ def validate_part(part, part_no):
             errors.append("group {} has no instruction line".format(group.get("id")))
 
         layout = str(group.get("layout", ""))
-        if layout.strip():
+        if gtype not in LETTER_ANSWER_TYPES and layout.strip():
             placeholders = {int(n) for n in re.findall(r"\{\s*(\d+)\s*\}", layout)}
             try:
                 span = set(range(int(group.get("from")), int(group.get("to")) + 1))
@@ -815,7 +1129,14 @@ def render_options(options, indent=""):
 
 
 def render_visual_block(visual):
-    return "{IMAGE-HERE}"
+    img_filename = visual.get("image_filename")
+    if img_filename:
+        return "![{}]({})".format(visual.get("title", "Visual"), img_filename)
+    mermaid = str(visual.get("mermaid", "")).strip()
+    if mermaid:
+        return "```mermaid\n{}\n```".format(mermaid)
+    vid = visual.get("id", "visual")
+    return "![{}]({}.png)".format(visual.get("title", "Visual"), f"visual_{vid}")
 
 
 def render_part_questions(part, part_no):
@@ -859,7 +1180,7 @@ def render_part_questions(part, part_no):
             out += [render_layout(layout, numbers), ""]
 
         group_options = as_list(group.get("options"))
-        if group_options and not layout:
+        if group_options:
             out += [render_options(group_options), ""]
 
         for question in members:
@@ -1009,7 +1330,8 @@ def blind_solve(llm, part, part_no):
         schema=BLIND_SOLVE_SCHEMA,
     )
     data = llm.json_call(VERIFIER_SYSTEM, user, max_tokens=6000, temperature=0.0,
-                         label="verify:solve:p{}".format(part_no))
+                         label="verify:solve:p{}".format(part_no),
+                         schema=BLIND_SOLVE_JSON_SCHEMA, schema_name="blind_solve")
     return {int(a["number"]): a for a in as_list(data.get("answers"))
             if isinstance(a, dict) and str(a.get("number", "")).isdigit()}
 
@@ -1045,7 +1367,8 @@ def audit_part(llm, part, part_no):
         schema=AUDIT_SCHEMA,
     )
     data = llm.json_call(VERIFIER_SYSTEM, user, max_tokens=6000, temperature=0.0,
-                         label="verify:audit:p{}".format(part_no))
+                         label="verify:audit:p{}".format(part_no),
+                         schema=AUDIT_JSON_SCHEMA, schema_name="audit")
     return {int(v["number"]): v for v in as_list(data.get("verdicts"))
             if isinstance(v, dict) and str(v.get("number", "")).isdigit()}
 
@@ -1107,6 +1430,11 @@ def run_verification(llm, system, parts, verification_state):
                 repaired = repair_part(llm, system, part, part_no, problems,
                                        "verify:repair:p{}".format(part_no))
                 errors, _ = validate_part(repaired, part_no)
+                if any(is_length_error(e) for e in errors):
+                    print("    repaired part undershoots the word-count floor - "
+                          "expanding transcript")
+                    repaired = expand_transcript(llm, system, repaired, part_no)
+                    errors, _ = validate_part(repaired, part_no)
                 if errors:
                     print("    repaired part fails {} local check(s) - re-verifying it "
                           "before deciding whether to keep it".format(len(errors)))
@@ -1167,16 +1495,25 @@ def build_test(llm, system, args):
             for error in errors[:6]:
                 print("      - {}".format(error))
             try:
-                repaired = repair_part(llm, system, part, part_no, errors,
-                                       "repair:p{}".format(part_no))
-                new_errors, new_warnings = validate_part(repaired, part_no)
-                if not new_errors or len(new_errors) < len(errors):
-                    part, errors, warnings = repaired, new_errors, new_warnings
-                    validation["repaired"].append(part_no)
+                if any(is_length_error(e) for e in errors):
+                    print("    expanding transcript to reach the word-count floor")
+                    part = expand_transcript(llm, system, part, part_no)
+                    errors, warnings = validate_part(part, part_no)
+
+                if errors:
+                    repaired = repair_part(llm, system, part, part_no, errors,
+                                           "repair:p{}".format(part_no))
+                    new_errors, new_warnings = validate_part(repaired, part_no)
+                    if not new_errors or len(new_errors) < len(errors):
+                        part, errors, warnings = repaired, new_errors, new_warnings
+                        validation["repaired"].append(part_no)
+                    else:
+                        # the repair traded one defect for another - keep the known state
+                        print("    repair did not reduce the error count ({} -> {}) - "
+                              "keeping the original part".format(len(errors), len(new_errors)))
                 else:
-                    # the repair traded one defect for another - keep the known state
-                    print("    repair did not reduce the error count ({} -> {}) - "
-                          "keeping the original part".format(len(errors), len(new_errors)))
+                    validation["repaired"].append(part_no)
+
                 if errors:
                     print("    still {} error(s) after repair - continuing anyway"
                           .format(len(errors)))
@@ -1214,6 +1551,12 @@ def build_test(llm, system, args):
 
 def write_outputs(test, out_dir):
     out_dir.mkdir(parents=True, exist_ok=True)
+    visual_files = []
+    try:
+        visual_files = process_test_visuals(test, out_dir)
+    except Exception as exc:
+        print("! Error processing visuals: {}".format(exc))
+
     (out_dir / "test.json").write_text(
         json.dumps(test, ensure_ascii=False, indent=2), encoding="utf-8")
     (out_dir / "student_paper.md").write_text(render_student_paper(test), encoding="utf-8")
@@ -1224,6 +1567,7 @@ def write_outputs(test, out_dir):
     if visuals:
         (out_dir / "visuals.md").write_text(visuals, encoding="utf-8")
         written.append("visuals.md")
+    written.extend(visual_files)
     return written
 
 

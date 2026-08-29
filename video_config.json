@@ -1,0 +1,48 @@
+{
+  "resolution": {
+    "width": 1920,
+    "height": 1080
+  },
+  "fps": 10,
+  "theme": {
+    "background_color": "#F8FAFC",
+    "paper_background": "#FFFFFF",
+    "text_primary": "#0F172A",
+    "text_secondary": "#475569",
+    "text_muted": "#64748B",
+    "border_color": "#CBD5E1",
+    "card_background": "#F1F5F9",
+    "brand_blue": "#1E40AF",
+    "accent_blue": "#3B82F6",
+    "alert_red": "#DC2626",
+    "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+  },
+  "hud": {
+    "height": 72,
+    "bg_color": "#0F172A",
+    "text_color": "#FFFFFF",
+    "badge_bg": "#1E293B",
+    "badge_text": "#94A3B8",
+    "badge_active_bg": "#1E40AF",
+    "badge_active_text": "#FFFFFF",
+    "countdown_color": "#F59E0B",
+    "countdown_urgent_color": "#EF4444",
+    "countdown_urgent_threshold_sec": 5,
+    "progress_bar_color": "#3B82F6",
+    "progress_bar_bg": "#334155",
+    "progress_bar_height": 4
+  },
+  "visual_generation": {
+    "model": "gemini-3.1-flash-image",
+    "style_suffix": ", clean black-and-white technical exam diagram, flat 2D line art, plain white background, bold sans-serif letter labels A B C D E clearly readable, no shading, no perspective, no photorealism.",
+    "aspect_ratio": "4:3",
+    "image_size": "2K"
+  },
+  "sections": {
+    "show_title_card": true,
+    "show_answer_key": true,
+    "answer_key_duration_sec": 60,
+    "show_end_card": true,
+    "end_card_duration_sec": 10
+  }
+}
