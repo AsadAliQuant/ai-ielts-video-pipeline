@@ -58,7 +58,7 @@ jobs:
         run: python generate_audio.py "${{ steps.testdir.outputs.dir }}"
 
       - name: Publish to SaaS pool (D1 + R2)
-        continue-on-error: true # not yet configured (missing R2 secrets, CF_API_TOKEN needs D1 permission) -- don't block video upload
+        continue-on-error: true # R2 skipped intentionally for now -- don't block video/YouTube upload
         env:
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
