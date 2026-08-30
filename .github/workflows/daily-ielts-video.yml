@@ -2,8 +2,10 @@ name: Daily IELTS Video
 
 on:
   schedule:
-    # 03:00 UTC every day -- edit to taste (cron is always UTC)
+    # Runs 3x/day, 8 hours apart (cron is always UTC) -- edit to taste
     - cron: "0 3 * * *"
+    - cron: "0 11 * * *"
+    - cron: "0 19 * * *"
   workflow_dispatch:
     inputs:
       band:
@@ -51,6 +53,17 @@ jobs:
         env:
           FISH_AUDIO: ${{ secrets.FISH_AUDIO }}
         run: python generate_audio.py "${{ steps.testdir.outputs.dir }}"
+
+      - name: Publish to SaaS pool (D1 + R2)
+        continue-on-error: true # not yet configured (missing R2/D1 secrets) -- don't block video upload
+        env:
+          CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
+          CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
+          CF_D1_DATABASE_ID: ${{ secrets.CF_D1_DATABASE_ID }}
+          R2_ACCESS_KEY_ID: ${{ secrets.R2_ACCESS_KEY_ID }}
+          R2_SECRET_ACCESS_KEY: ${{ secrets.R2_SECRET_ACCESS_KEY }}
+          R2_BUCKET_NAME: ${{ secrets.R2_BUCKET_NAME }}
+        run: python publish_test.py "${{ steps.testdir.outputs.dir }}"
 
       - name: Stage 3 - render video
         env:
