@@ -146,12 +146,43 @@ def as_list(value):
 class _Backend:
     """One usable (client, model) pair the LLM class can fall back across."""
 
-    def __init__(self, name, client, model):
+    def __init__(self, name, client, model, schema_styles=None):
         self.name = name
         self.client = client
         self.model = model
         self.json_mode = True          # switched off automatically if unsupported
-        self.supports_schema = name.startswith("gemini")  # response_format: json_schema
+        self._schema_styles = list(schema_styles or [])   # remaining styles to try, in order
+        self.schema_style = self._schema_styles.pop(0) if self._schema_styles else None
+
+    def demote_schema(self):
+        """Give up on the current structured-output style and move to the next one."""
+        old = self.schema_style
+        self.schema_style = self._schema_styles.pop(0) if self._schema_styles else None
+        if self.schema_style:
+            print("    ! {} rejects '{}' schema mode - trying '{}'".format(
+                self.name, old, self.schema_style))
+        else:
+            print("    ! {} rejects '{}' schema mode - falling back to "
+                  "json_object mode".format(self.name, old))
+
+
+def _nvidia_schema_styles(mode):
+    """Ordered structured-output styles to probe for an NVIDIA NIM backend."""
+    return {
+        "auto": ["json_schema", "guided_json"],
+        "json_schema": ["json_schema"],
+        "guided_json": ["guided_json"],
+        "off": [],
+    }[mode]
+
+
+def _is_schema_rejection(text):
+    """True if an API error looks like it's complaining about structured-output kwargs."""
+    t = text.lower()
+    return any(s in t for s in (
+        "json_schema", "response_format", "schema", "nvext", "guided_json",
+        "extra_body", "extra inputs are not permitted", "unknown field",
+    ))
 
 
 def _load_gemini_keys():
@@ -169,7 +200,7 @@ class LLM:
     """
 
     def __init__(self, provider, model, gemini_model=DEFAULT_GEMINI_MODEL,
-                 temperature=0.7, verbose=True):
+                 temperature=0.7, verbose=True, nvidia_schema="auto"):
         load_dotenv(ROOT / ".env")
         nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
         gemini_keys = _load_gemini_keys()
@@ -180,18 +211,21 @@ class LLM:
                 sys.exit("NVIDIA_API_KEY missing. Copy .env.example to .env and add your key.")
             self.backends.append(_Backend(
                 "nvidia", OpenAI(base_url=NVIDIA_BASE_URL, api_key=nvidia_key,
-                                  timeout=900.0, max_retries=0), model))
+                                  timeout=900.0, max_retries=0), model,
+                schema_styles=_nvidia_schema_styles(nvidia_schema)))
             for i, gkey in enumerate(gemini_keys, 1):
                 self.backends.append(_Backend(
                     "gemini#{}".format(i), OpenAI(base_url=GEMINI_BASE_URL, api_key=gkey,
-                                                   timeout=900.0, max_retries=0), gemini_model))
+                                                   timeout=900.0, max_retries=0), gemini_model,
+                    schema_styles=["json_schema"]))
         elif provider == "gemini":
             if not gemini_keys:
                 sys.exit("No GEMINI_API_KEYS found in .env (comma-separated list of keys).")
             for i, gkey in enumerate(gemini_keys, 1):
                 self.backends.append(_Backend(
                     "gemini#{}".format(i), OpenAI(base_url=GEMINI_BASE_URL, api_key=gkey,
-                                                   timeout=900.0, max_retries=0), gemini_model))
+                                                   timeout=900.0, max_retries=0), gemini_model,
+                    schema_styles=["json_schema"]))
         else:
             sys.exit("Unknown --provider '{}' (expected nvidia or gemini)".format(provider))
 
@@ -213,18 +247,21 @@ class LLM:
         last_error = None
         for bi in range(self.backend_index, len(self.backends)):
             backend = self.backends[bi]
-            for attempt in range(3):
+            attempt = 0
+            while attempt < 3:
                 kwargs = dict(
                     model=backend.model,
                     messages=messages,
                     temperature=self.temperature if temperature is None else temperature,
                     max_tokens=max_tokens,
                 )
-                if schema is not None and backend.supports_schema:
+                if schema is not None and backend.schema_style == "json_schema":
                     kwargs["response_format"] = {
                         "type": "json_schema",
                         "json_schema": {"name": schema_name or "response", "schema": schema},
                     }
+                elif schema is not None and backend.schema_style == "guided_json":
+                    kwargs["extra_body"] = {"nvext": {"guided_json": schema}}
                 elif backend.json_mode:
                     kwargs["response_format"] = {"type": "json_object"}
                 try:
@@ -237,8 +274,9 @@ class LLM:
                         last_error = RuntimeError("empty completion")
                         print("    ! [{}/{}] {:.1f}s, empty completion".format(
                             backend.name, label or "call", elapsed))
-                        if attempt < 2:
-                            wait = 3 * (attempt + 1)
+                        attempt += 1
+                        if attempt < 3:
+                            wait = 3 * attempt
                             print("    ! retrying in {}s".format(wait))
                             time.sleep(wait)
                         continue
@@ -250,25 +288,23 @@ class LLM:
                 except Exception as exc:                        # noqa: BLE001
                     last_error = exc
                     text = str(exc)
-                    if backend.supports_schema and schema is not None and (
-                            "json_schema" in text or "response_format" in text
-                            or "schema" in text.lower()):
-                        backend.supports_schema = False
-                        print("    ! {} rejects JSON schema mode - falling back to "
-                              "json_object mode".format(backend.name))
-                        continue
+                    if backend.schema_style and schema is not None and _is_schema_rejection(text):
+                        backend.demote_schema()
+                        continue  # free retry - probing a style costs no attempt budget
                     if backend.json_mode and ("response_format" in text or "json_object" in text):
                         backend.json_mode = False
                         print("    ! {} rejects JSON mode - falling back to plain text".format(
                             backend.name))
+                        attempt += 1
                         continue
                     is_rate_limit = "429" in text or "rate" in text.lower() or "quota" in text.lower()
                     if is_rate_limit:
                         print("    ! {} rate-limited ({}) - switching backend".format(
                             backend.name, text[:120]))
                         break
-                    if attempt < 2:
-                        wait = 3 * (attempt + 1)
+                    attempt += 1
+                    if attempt < 3:
+                        wait = 3 * attempt
                         print("    ! {} API error ({}) - retrying in {}s".format(
                             backend.name, text[:120], wait))
                         time.sleep(wait)
@@ -1621,15 +1657,19 @@ def parse_args(argv=None):
                         choices=["academic", "general"], help="test context")
     parser.add_argument("--topics", default="",
                         help="optional comma-separated topic hints for the four parts")
-    parser.add_argument("--provider", default="nvidia", choices=["nvidia", "gemini"],
-                        help="which API to use (default: nvidia, auto-falls back to "
-                             "GEMINI_API_KEYS on failure)")
+    parser.add_argument("--provider", default="gemini", choices=["nvidia", "gemini"],
+                        help="which API to use (default: gemini)")
     parser.add_argument("--model", default=DEFAULT_MODEL, help="NVIDIA NIM model id")
     parser.add_argument("--gemini-model", default=DEFAULT_GEMINI_MODEL,
                         help="Gemini model id, used for --provider gemini and for the "
                              "NVIDIA->Gemini fallback")
     parser.add_argument("--out", default="tests", help="output folder (default: tests)")
     parser.add_argument("--temperature", type=float, default=0.7)
+    parser.add_argument("--nvidia-schema", default="auto",
+                        choices=["auto", "json_schema", "guided_json", "off"],
+                        help="structured-output style to use on NVIDIA NIM (default: auto-"
+                             "probe json_schema then guided_json; off restores plain "
+                             "json_object mode)")
     parser.add_argument("--skip-verify", action="store_true",
                         help="skip the LLM verification agent (faster dev runs)")
     args = parser.parse_args(argv)
@@ -1642,7 +1682,7 @@ def main(argv=None):
     args = parse_args(argv)
     system = load_system_prompt()
     llm = LLM(args.provider, args.model, gemini_model=args.gemini_model,
-              temperature=args.temperature)
+              temperature=args.temperature, nvidia_schema=args.nvidia_schema)
 
     print("Generating an IELTS Listening test ({}, band {}) with provider={} model={}\n".format(
         args.difficulty, args.band, args.provider,

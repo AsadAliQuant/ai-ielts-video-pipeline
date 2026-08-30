@@ -21,7 +21,7 @@ Stage 1 — generate test paper (`tests/test_NNN/test.json`, `student_paper.md`,
 ```bash
 python -u generate_test.py --band 7.0                # full run w/ LLM verification, ~40-60 min
 python -u generate_test.py --band 7.0 --skip-verify   # skip verification, ~15 min
-python -u generate_test.py --provider gemini          # use Gemini instead of NVIDIA NIM
+python -u generate_test.py --provider nvidia          # use NVIDIA NIM instead of Gemini (default)
 ```
 
 Stage 2 — voices + audio:
@@ -53,7 +53,7 @@ pipeline **output** (generated exam runs), not a unit test suite — don't confu
 Three independently runnable stages, each consuming the previous stage's output directory:
 
 1. **Stage 1 — `generate_test.py`** (+ `generate_visual.py`, `system_prompt.txt`): calls an
-   LLM (NVIDIA NIM by default, Gemini as fallback/alt via `--provider`) to author a complete
+   LLM (Gemini by default, NVIDIA NIM as fallback/alt via `--provider`) to author a complete
    4-part/40-question test, validates answer formats/word limits locally, optionally runs a
    second LLM pass that blind-solves and audits the test, then renders the student paper,
    transcript, answer key, and visuals.md. `system_prompt.txt` is a 900+ line spec treated as
@@ -97,8 +97,8 @@ that produced them — see `HANDOFF_PROMPT.md` for the full directory layout.
 
 | Var | Used by | Purpose |
 |---|---|---|
-| `NVIDIA_API_KEY` | `generate_test.py` | NVIDIA NIM LLM calls (default provider) |
-| `GEMINI_API_KEYS` (comma-separated) / `GEMINI_API_KEY` | `generate_test.py` | Gemini LLM fallback / `--provider gemini`; rotates keys on rate limit |
+| `GEMINI_API_KEYS` (comma-separated) / `GEMINI_API_KEY` | `generate_test.py` | Gemini LLM calls (default provider); rotates keys on rate limit |
+| `NVIDIA_API_KEY` | `generate_test.py` | NVIDIA NIM LLM calls, used via `--provider nvidia` |
 | `FISH_AUDIO` | `select_voices.py`, `generate_audio.py` | Fish Audio TTS |
 | `CF_ACCOUNT_ID`, `CF_API_TOKEN` | `generate_visual.py` (Stage 1 visuals) | Cloudflare Workers AI (FLUX-1-schnell) |
 | Gemini key(s) above | `generate_visuals.py` (Stage 3 visuals) | Gemini Image API for maps/diagrams |

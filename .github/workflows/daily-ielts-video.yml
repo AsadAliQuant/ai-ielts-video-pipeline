@@ -36,13 +36,13 @@ jobs:
 
       - name: Stage 1 - generate test paper
         env:
-          NVIDIA_API_KEY: ${{ secrets.NVIDIA_API_KEY }}
           GEMINI_API_KEYS: ${{ secrets.GEMINI_API_KEYS }}
           CF_ACCOUNT_ID: ${{ secrets.CF_ACCOUNT_ID }}
           CF_API_TOKEN: ${{ secrets.CF_API_TOKEN }}
         run: |
           python -u generate_test.py \
             --band "${{ github.event.inputs.band || '7.0' }}" \
+            --provider gemini \
             --skip-verify
 
       - name: Locate generated test dir

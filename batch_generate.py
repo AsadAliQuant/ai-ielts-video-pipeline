@@ -10,7 +10,7 @@ Usage:
     python batch_generate.py --count 5 --band 7.5          # Generate 5 tests for Band 7.5
     python batch_generate.py 2 --skip-verify --fast        # 2 tests with fast video muxing
     python batch_generate.py 3 --stage 1                  # Generate 3 test papers only (Stage 1)
-    python batch_generate.py 2 --provider gemini           # Use Gemini instead of NVIDIA NIM
+    python batch_generate.py 2 --provider nvidia           # Use NVIDIA NIM instead of Gemini
     python batch_generate.py 3 --dry-run                   # Show planned commands without executing
 """
 
@@ -73,7 +73,7 @@ def parse_args(argv=None):
     g_stage1.add_argument("--difficulty", default="", help='Difficulty label (defaults to "IELTS <band>")')
     g_stage1.add_argument("--context", default="academic", choices=["academic", "general"], help="Test context")
     g_stage1.add_argument("--topics", default="", help="Comma-separated topic hints for the 4 parts")
-    g_stage1.add_argument("--provider", default="nvidia", choices=["nvidia", "gemini"], help="LLM API provider")
+    g_stage1.add_argument("--provider", default="gemini", choices=["nvidia", "gemini"], help="LLM API provider")
     g_stage1.add_argument("--model", default="deepseek-ai/deepseek-v4-flash-0731", help="NVIDIA NIM model ID")
     g_stage1.add_argument("--gemini-model", default="gemini-3.1-flash-lite", help="Gemini model ID")
     g_stage1.add_argument("--skip-verify", action="store_true", help="Skip LLM verification agent pass (faster)")
