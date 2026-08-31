@@ -92,7 +92,8 @@ The difficulty should generally increase from Part 1 to Part 4.
 
 Before generating the test, accept or infer the following configuration:
 
-- Test title
+- Test title (must NOT contain the target band, the word "band", or any
+  difficulty number - the band is internal and never shown to candidates)
 - Topic/theme for each Part
 - Difficulty:
   beginner / intermediate / IELTS 5.0 / IELTS 6.0 / IELTS 7.0 / IELTS 8.0 / IELTS 9.0

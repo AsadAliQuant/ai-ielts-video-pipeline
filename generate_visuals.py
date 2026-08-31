@@ -13,13 +13,14 @@ import sys
 from pathlib import Path
 import requests
 from dotenv import load_dotenv
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 # Add project root to path for imports
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import fonts
 from generate_test import _load_gemini_keys
 
 
@@ -41,17 +42,11 @@ def create_fallback_card(visual: dict, out_path: Path):
     draw.rectangle([(20, 20), (width - 20, height - 20)], outline="#0F172A", width=3)
     draw.rectangle([(26, 26), (width - 26, height - 26)], outline="#94A3B8", width=1)
 
-    # Fonts (fall back to default if TTF not available)
-    try:
-        title_font = ImageFont.truetype("arialbd.ttf", 34)
-        subtitle_font = ImageFont.truetype("arial.ttf", 24)
-        item_font = ImageFont.truetype("arialbd.ttf", 22)
-        text_font = ImageFont.truetype("arial.ttf", 20)
-    except IOError:
-        title_font = ImageFont.load_default()
-        subtitle_font = ImageFont.load_default()
-        item_font = ImageFont.load_default()
-        text_font = ImageFont.load_default()
+    # Bundled fonts -- see fonts.py for why system font names are not used.
+    title_font = fonts.pillow_font("bold", 34)
+    subtitle_font = fonts.pillow_font("regular", 24)
+    item_font = fonts.pillow_font("bold", 22)
+    text_font = fonts.pillow_font("regular", 20)
 
     title = visual.get("title") or "EXAM DIAGRAM / MAP"
     purpose = visual.get("purpose") or ""
