@@ -17,8 +17,10 @@ ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import fonts
 from generate_audio import get_part_question_ranges
 from generate_visuals import generate_visuals, load_video_config
+from text_utils import clean_title
 
 
 # ---------------------------------------------------------------------------
@@ -37,7 +39,7 @@ body {
     height: 1080px;
     overflow: hidden;
     background-color: #F1F5F9;
-    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif, 'Apple Color Emoji', 'Segoe UI Emoji', 'Noto Color Emoji';
     color: #0F172A;
     display: flex;
     flex-direction: column;
@@ -552,7 +554,7 @@ def build_page_html(content_html: str, part_num: int | None = None,
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <style>{BASE_CSS}</style>
+    <style>{fonts.css_font_face()}{BASE_CSS}</style>
 </head>
 <body>
     <div class="paper-container">
@@ -572,8 +574,9 @@ def build_page_html(content_html: str, part_num: int | None = None,
 
 def render_title_screen(test_data: dict) -> str:
     meta = test_data.get("metadata", {})
-    title = meta.get("title", "IELTS Listening Practice Test")
-    target_band = meta.get("target_band", "7.0")
+    # The target band is an internal generation parameter and is deliberately
+    # not shown to viewers -- including inside the model-authored title.
+    title = clean_title(meta.get("title"))
     total_q = meta.get("total_questions", 40)
 
     content = f"""
@@ -582,7 +585,6 @@ def render_title_screen(test_data: dict) -> str:
         <h1 class="main-test-title">{html.escape(title)}</h1>
         
         <div class="test-meta-pills">
-            <div class="meta-pill">🎯 Target Band: {html.escape(str(target_band))}</div>
             <div class="meta-pill">⏱️ Total Duration: ~30 Minutes</div>
             <div class="meta-pill">📝 {total_q} Questions (4 Parts)</div>
         </div>
@@ -698,7 +700,8 @@ def render_screens(test_dir: str | Path, force_visuals: bool = False) -> dict:
                     q_from=None, q_to=None, screen_type="questions"):
             out_file = screens_dir / f"{screen_id}.png"
             page.set_content(html_str)
-            page.wait_for_timeout(100)  # Brief settle for fonts / layout
+            page.evaluate("document.fonts.ready")  # Inter must be live before capture
+            page.wait_for_timeout(100)  # Brief settle for layout
             page.screenshot(path=str(out_file))
             print(f"  -> Captured screen: {out_file.name} [{screen_type}] (Q{q_from}–Q{q_to})")
             screens_manifest.append({

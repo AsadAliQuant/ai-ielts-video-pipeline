@@ -31,8 +31,13 @@ jobs:
       - name: Install Playwright Chromium
         run: playwright install --with-deps chromium
 
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y ffmpeg
+      - name: Install ffmpeg and emoji font
+        # Inter is bundled in assets/fonts; only color emoji comes from the OS
+        # (the title card uses the clock and memo emoji).
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-color-emoji
+
+      - name: Verify bundled fonts load
+        run: python -c "import fonts; fonts.selftest()"
 
       - name: Stage 1 - generate test paper
         env:

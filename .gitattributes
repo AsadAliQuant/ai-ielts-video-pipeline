@@ -1,0 +1,4 @@
+# Never line-ending-convert the bundled fonts: a corrupted TTF/woff2 on the
+# Linux runner would silently reintroduce the broken-font bug these fix.
+*.ttf binary
+*.woff2 binary

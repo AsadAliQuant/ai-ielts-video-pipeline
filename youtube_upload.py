@@ -22,6 +22,8 @@ from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
 import os
 
+from text_utils import clean_title
+
 load_dotenv()
 
 SCOPES = ["https://www.googleapis.com/auth/youtube.upload"]
@@ -48,10 +50,10 @@ def build_youtube_client():
 def build_metadata(test_dir: Path):
     test = json.loads((test_dir / "test.json").read_text(encoding="utf-8"))
     meta = test["metadata"]
-    band = meta.get("target_band", "")
     topics = meta.get("part_topics", {})
 
-    title = f"IELTS Listening Practice Test - Band {band} | Full Test with Answers"
+    # The target band is an internal generation parameter -- never shown to viewers.
+    title = f"{clean_title(meta.get('title'))} | Full Test with Answers"
     if len(title) > 100:
         title = title[:97] + "..."
 
@@ -60,8 +62,8 @@ def build_metadata(test_dir: Path):
     chapters = chapters_path.read_text(encoding="utf-8") if chapters_path.exists() else ""
 
     description = (
-        f"Full IELTS Listening practice test, target Band {band}, generated and narrated "
-        f"end-to-end.\n\nTopics covered:\n{topic_lines}\n\n"
+        "Full IELTS Listening practice test, generated and narrated end-to-end."
+        f"\n\nTopics covered:\n{topic_lines}\n\n"
         "Try it yourself before checking the answer key, then use the timestamps below to "
         "jump to any part.\n\n"
         f"{chapters}\n\n#IELTS #IELTSListening #IELTSPractice"

@@ -19,12 +19,13 @@ import subprocess
 import sys
 import wave
 from pathlib import Path
-from PIL import Image, ImageDraw, ImageFont
+from PIL import Image, ImageDraw
 
 ROOT = Path(__file__).resolve().parent
 if str(ROOT) not in sys.path:
     sys.path.insert(0, str(ROOT))
 
+import fonts
 from build_timeline import build_timeline
 from generate_visuals import generate_visuals, load_video_config
 from render_screens import render_screens
@@ -53,14 +54,12 @@ class HUDCompositor:
         self.progress_bar_bg = self.hud_cfg.get("progress_bar_bg", "#334155")
         self.progress_height = self.hud_cfg.get("progress_bar_height", 4)
 
-        try:
-            self.font_bold = ImageFont.truetype("arialbd.ttf", 22)
-            self.font_medium = ImageFont.truetype("arialbd.ttf", 18)
-            self.font_regular = ImageFont.truetype("arial.ttf", 16)
-        except IOError:
-            self.font_bold = ImageFont.load_default()
-            self.font_medium = ImageFont.load_default()
-            self.font_regular = ImageFont.load_default()
+        # Bundled fonts, never system ones: asking Pillow for "arialbd.ttf"
+        # resolved on Windows and silently fell back to a ~10px bitmap font on
+        # the Linux CI runner, which shrank every badge and dropped the en-dash.
+        self.font_bold = fonts.pillow_font("bold", 22)
+        self.font_medium = fonts.pillow_font("bold", 18)
+        self.font_regular = fonts.pillow_font("regular", 16)
 
     def draw_hud(self, width: int, part_label: str, range_label: str,
                  status_label: str, countdown_sec: int | None,

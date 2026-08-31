@@ -15,7 +15,7 @@
     "brand_blue": "#1E40AF",
     "accent_blue": "#3B82F6",
     "alert_red": "#DC2626",
-    "font_family": "-apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif"
+    "font_family": "Inter (bundled in assets/fonts -- see fonts.py; this key is informational only)"
   },
   "hud": {
     "height": 72,
