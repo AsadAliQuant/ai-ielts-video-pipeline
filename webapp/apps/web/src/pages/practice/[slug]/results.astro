@@ -1,0 +1,18 @@
+---
+import "@workspace/ui/globals.css"
+import { ResultsView } from "../../../components/results/ResultsView"
+
+const slug = Astro.params.slug!
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Results</title>
+  </head>
+  <body>
+    <ResultsView slug={slug} client:only="react" />
+  </body>
+</html>

@@ -74,6 +74,7 @@ def build_timeline(test_dir: str | Path, config_path: str | Path = None) -> dict
         )
 
     parts_data = test_data.get("parts", [])
+    narrator_gap = timing.get("narrator_gap_sec", 3)
     segments = []
     current_time = 0.0
 
@@ -110,6 +111,12 @@ def build_timeline(test_dir: str | Path, config_path: str | Path = None) -> dict
         if intro_pause > 0:
             add_segment(kind="intro_pause", duration=intro_pause, part_num=None)
 
+    def add_gap(part_num, q_from, q_to):
+        """Mirror generate_audio.assemble_part's add_gap(). No countdown."""
+        if narrator_gap > 0:
+            add_segment(kind="gap", duration=narrator_gap, part_num=part_num,
+                        q_from=q_from, q_to=q_to)
+
     # 2. Parts 1 through 4
     for part_no, part in enumerate(parts_data, start=1):
         q_from, q_mid, q_mid_next, q_to = get_part_question_ranges(part_no, part)
@@ -136,6 +143,16 @@ def build_timeline(test_dir: str | Path, config_path: str | Path = None) -> dict
                         q_from=q_from, q_to=q_mid,
                         audio_file=p_listen.name)
 
+        add_gap(part_no, q_from, q_mid)
+
+        # Phone ring + pickup cue (only when Stage 2 flagged the part)
+        p_sfx = seg_dir / f"part_{part_no}_02b_sfx_phone.wav"
+        if p_sfx.exists():
+            d = read_segment_duration_bytes(p_sfx, sample_rate)
+            add_segment(kind="sfx_phone", duration=d, part_num=part_no,
+                        q_from=q_from, q_to=q_mid,
+                        audio_file=p_sfx.name)
+
         # Dialogue 1
         p_dial1 = seg_dir / f"part_{part_no}_03_dialogue_1.wav"
         if p_dial1.exists():
@@ -143,6 +160,8 @@ def build_timeline(test_dir: str | Path, config_path: str | Path = None) -> dict
             add_segment(kind="dialogue_1", duration=d, part_num=part_no,
                         q_from=q_from, q_to=q_mid,
                         audio_file=p_dial1.name)
+
+        add_gap(part_no, q_from, q_mid)
 
         # Mid-break (Parts 1-3 when present)
         p_mid_narr = seg_dir / f"part_{part_no}_04_narrator_mid.wav"
@@ -166,11 +185,15 @@ def build_timeline(test_dir: str | Path, config_path: str | Path = None) -> dict
                             q_from=q_mid_next, q_to=q_to,
                             audio_file=p_listen2.name)
 
+            add_gap(part_no, q_mid_next, q_to)
+
             if p_dial2.exists():
                 d = read_segment_duration_bytes(p_dial2, sample_rate)
                 add_segment(kind="dialogue_2", duration=d, part_num=part_no,
                             q_from=q_mid_next, q_to=q_to,
                             audio_file=p_dial2.name)
+
+            add_gap(part_no, q_mid_next, q_to)
 
         # Part End Narrator
         p_end = seg_dir / f"part_{part_no}_07_narrator_end.wav"

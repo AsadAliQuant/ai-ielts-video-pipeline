@@ -1,5 +1,7 @@
 # CLAUDE.md
 
+Fish Audio is 100% free for developers with the model we are using.
+
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
 ## Overview

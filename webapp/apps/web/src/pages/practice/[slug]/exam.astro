@@ -1,0 +1,27 @@
+---
+import "@workspace/ui/globals.css"
+import { ExamPlayer } from "../../../components/exam/ExamPlayer"
+import { env } from "cloudflare:workers"
+
+const slug = Astro.params.slug!
+const exists = await env.DB
+  .prepare(`SELECT 1 FROM tests WHERE slug = ? AND status = 'published'`)
+  .bind(slug)
+  .first()
+
+if (!exists) {
+  return Astro.redirect("/practice")
+}
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Exam in progress</title>
+  </head>
+  <body>
+    <ExamPlayer slug={slug} client:only="react" />
+  </body>
+</html>

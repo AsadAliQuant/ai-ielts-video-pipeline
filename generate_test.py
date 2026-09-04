@@ -19,7 +19,6 @@ import os
 import re
 import sys
 import time
-import unicodedata
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -30,11 +29,14 @@ except ImportError:
     sys.exit("Missing dependencies. Run:  pip install -r requirements.txt")
 
 from generate_visual import process_test_visuals
+from midbreak import (LETTER_ANSWER_TYPES, annotate_mid_break,
+                      describe_mid_break, resolve_mid_break)
+from text_utils import find_phrase, norm
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
 DEFAULT_MODEL = "deepseek-ai/deepseek-v4-flash-0731"
-DEFAULT_GEMINI_MODEL = "gemini-3.1-flash-lite"
+DEFAULT_GEMINI_MODEL = "gemini-3.5-flash-lite"
 ROOT = Path(__file__).resolve().parent
 
 PART_RANGES = {1: (1, 10), 2: (11, 20), 3: (21, 30), 4: (31, 40)}
@@ -57,7 +59,6 @@ TRANSCRIPT_FLOOR = {1: 450, 2: 520, 3: 600, 4: 680}
 
 WORD_NUM = {"one": 1, "two": 2, "three": 3, "four": 4, "five": 5}
 
-LETTER_ANSWER_TYPES = {"multiple_choice", "multiple_response", "matching"}
 
 STUDENT_INSTRUCTIONS = (
     "You will hear four recordings.\n\n"
@@ -71,22 +72,6 @@ STUDENT_INSTRUCTIONS = (
 # --------------------------------------------------------------------------
 # text utilities
 # --------------------------------------------------------------------------
-
-def norm(text):
-    """Lowercase, strip accents/punctuation/currency, collapse whitespace."""
-    s = unicodedata.normalize("NFKD", str(text))
-    s = "".join(c for c in s if not unicodedata.combining(c))
-    s = s.replace("’", "'").replace("‘", "'")
-    s = s.lower()
-    s = re.sub(r"[^a-z0-9' ]+", " ", s)
-    return re.sub(r"\s+", " ", s).strip()
-
-
-def find_phrase(haystack, needle, start=0):
-    """Position of needle in haystack matching at word boundaries only, else -1."""
-    m = re.compile(r"(?<!\S)" + re.escape(needle) + r"(?!\S)").search(haystack, start)
-    return m.start() if m else -1
-
 
 def answer_shape(answer):
     """Return (word_count, number_count) for an answer string."""
@@ -462,6 +447,7 @@ Hard rules for this part:
 - Never write an answer into "layout", "instruction", "heading", a question's "text", the "mermaid" code, or the "image_prompt". Mermaid shows blanks only - [A], [B] or the bare question number - never the correct label.
 - The transcript is TTS-ready spoken English only: no question numbers, no answer markers, no bracketed stage directions, no teacher notes. Open with a short Narrator line, then natural dialogue or lecture.
 - Keep the transcript within the length guidance in section 11 of your instructions.
+- The recording is played in two halves with a pause between them, split at the boundary between the first question group and the second. Pace the speech so the first group's answers occupy roughly the first 55-65% of the spoken content, and none of the later groups' answers are spoken before that point.
 """
 
 VERIFIER_SYSTEM = """You are an independent IELTS Listening quality assurance examiner.
@@ -1063,6 +1049,21 @@ def validate_part(part, part_no):
             errors.append("Q{}: answer '{}' is printed in the image prompt students see"
                           .format(number, value))
 
+    # Pacing: can the recording actually be split where the narrator says it is?
+    if part_no != 4:
+        resolved = resolve_mid_break(part, part_no)
+        if resolved.split is None:
+            warnings.append(
+                "part {} cannot be split for the mid-section break, so it will "
+                "play straight through and the narrator will announce questions "
+                "{}-{} in one go - the answers are spread so that no cut "
+                "separates the question groups".format(
+                    part_no, resolved.q_from, resolved.q_to))
+        elif resolved.resolved_by == "proportional":
+            warnings.append(
+                "part {} mid-break falls on a proportional estimate: no answer "
+                "could be located in the transcript to anchor it".format(part_no))
+
     for needle, numbers in written_seen.items():
         if len(numbers) > 1:
             first, *rest = numbers
@@ -1589,8 +1590,43 @@ def build_test(llm, system, args):
             "validation": validation, "verification": None}
 
 
+PHONE_HINTS = ("calling", "call the", "phone", "telephone", "hotline",
+               "speaking?", "on the line", "ring")
+
+
+def detect_phone_call(part):
+    """True if this part's scene is a phone conversation.
+
+    Stage 2 reads the resulting audio_cues.phone_call flag to decide whether to
+    play the ring + pickup cue before the dialogue. Hand-editable in test.json.
+    """
+    blob = str(part.get("situation", "")).lower()
+    for entry in as_list(part.get("transcript"))[:3]:
+        if isinstance(entry, dict):
+            blob += " " + str(entry.get("line", "")).lower()
+    return any(hint in blob for hint in PHONE_HINTS)
+
+
+def annotate_audio_cues(test):
+    """Tag each part with the audio cues Stage 2 needs.
+
+    Runs from write_outputs, after every repair and verification round-trip, so
+    the resolved mid-break is computed against the transcript that actually
+    ships. mid_break is null for Part 4 and for any part with no usable split
+    point; Stage 2 then plays that part straight through and the narrator
+    announces the whole question range at once.
+    """
+    for part_no, part in enumerate(as_list(test.get("parts")), start=1):
+        cues = part.setdefault("audio_cues", {})
+        cues["phone_call"] = detect_phone_call(part)
+        record, resolved = annotate_mid_break(part, part_no)
+        cues["mid_break"] = record
+        print("  part {}: {}".format(part_no, describe_mid_break(resolved, part_no)))
+
+
 def write_outputs(test, out_dir):
     out_dir.mkdir(parents=True, exist_ok=True)
+    annotate_audio_cues(test)
     visual_files = []
     try:
         visual_files = process_test_visuals(test, out_dir)
@@ -1654,7 +1690,7 @@ def print_summary(test, out_dir, written, llm):
 def parse_args(argv=None):
     parser = argparse.ArgumentParser(
         description="Generate an original IELTS Listening practice test.")
-    parser.add_argument("--band", default="7.0", help="target band, e.g. 7 or 7.5")
+    parser.add_argument("--band", default="9.0", help="target band, e.g. 7 or 7.5")
     parser.add_argument("--difficulty", default="",
                         help='difficulty label, e.g. "IELTS 7.0" (defaults to the band)')
     parser.add_argument("--context", default="academic",

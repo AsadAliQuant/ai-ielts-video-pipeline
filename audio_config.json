@@ -48,20 +48,22 @@
   },
 
   "timing": {
-    "intro_pause_sec": 2,
+    "intro_pause_sec": 5,
     "preparation_time_sec": 30,
-    "checking_time_sec": 30,
+    "checking_time_sec": 60,
     "between_parts_sec": 3,
-    "mid_part_break_sec": 30
+    "mid_part_break_sec": 15,
+    "narrator_gap_sec": 3,
+    "phone_ring_sec": 5.0
   },
 
   "narrator_scripts": {
     "intro": "This is the IELTS Listening test. You will hear four different recordings and you will have to answer questions on what you hear. There will be time for you to read the instructions and questions, and you will have a chance to check your work. You will hear each recording once only. The test is in four parts. At the end of the test, you will be given two minutes to check all of your answers.",
-    "situation": "You will hear {situation}. First, you have some time to look at questions {q_from} to {q_mid}.",
+    "situation": "Part {part_number}. You will hear {situation}. First, you have some time to look at questions {q_from} to {q_mid}.",
     "now_listen_first": "Now listen carefully and answer questions {q_from} to {q_mid}.",
     "mid_break": "Before you hear the rest of the conversation, you have some time to look at questions {q_mid_next} to {q_to}.",
     "now_listen_rest": "Now listen and answer questions {q_mid_next} to {q_to}.",
-    "end_part": "That is the end of Part {part_number}. You now have half a minute to check your answers.",
+    "end_part": "That is the end of Part {part_number}. You now have 1 minute to check your answers to part {part_number}.",
     "turn_to_next": "Now turn to Part {next_part}.",
     "end_test": "That is the end of the Listening test. You now have ten minutes to transfer your answers to the answer sheet."
   },

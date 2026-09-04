@@ -9,3 +9,11 @@ voice_sample_*.mp3
 video/
 visuals/
 *.mp4
+
+# webapp (Astro/turborepo scaffold)
+webapp/node_modules/
+webapp/**/node_modules/
+webapp/**/dist/
+webapp/**/.astro/
+webapp/.turbo/
+webapp/**/.turbo/

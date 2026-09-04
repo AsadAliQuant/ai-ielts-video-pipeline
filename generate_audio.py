@@ -22,6 +22,7 @@ import argparse
 import io
 import json
 import os
+import re
 import struct
 import subprocess
 import sys
@@ -35,8 +36,11 @@ try:
 except ImportError:
     sys.exit("Missing dependencies. Run:  pip install requests python-dotenv")
 
+from midbreak import describe_mid_break, mid_break_for
+
 ROOT = Path(__file__).resolve().parent
 CONFIG_PATH = ROOT / "audio_config.json"
+ASSETS = ROOT / "assets"
 
 FISH_API = "https://api.fish.audio"
 
@@ -161,6 +165,64 @@ def ffmpeg_resample(wav_bytes, target_rate, target_channels, target_sampwidth):
     # If ffmpeg fails, return original — best effort
     print("    WARNING: ffmpeg resample failed, using original sample rate")
     return wav_bytes
+
+
+def pcm_to_wav(pcm_bytes, sample_rate=44100, channels=1, sample_width=2):
+    """Wrap raw PCM frames in a correct WAV container."""
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(channels)
+        wf.setsampwidth(sample_width)
+        wf.setframerate(sample_rate)
+        wf.writeframes(pcm_bytes)
+    return buf.getvalue()
+
+
+def load_sfx_pcm(path, sample_rate=44100, max_sec=None):
+    """Decode a sound-effect file (mp3/wav) to raw mono 16-bit PCM frames.
+
+    The bundled SFX are stereo MP3s at mixed sample rates; every pipeline
+    segment is 44.1kHz mono pcm_s16le, so ffmpeg normalises both. When max_sec
+    is given the clip is trimmed with a short fade-out — a hard cut lands
+    mid-tone and clicks.
+
+    Decodes to raw s16le rather than WAV because ffmpeg cannot seek back to
+    patch RIFF sizes when writing to a pipe, which is what produces the broken
+    headers this pipeline works around elsewhere. The caller wraps the frames
+    with pcm_to_wav(), giving a header the wave module can trust.
+
+    Returns None on any failure — SFX must never block the pipeline.
+    """
+    path = Path(path)
+    if not path.exists():
+        print(f"    WARNING: SFX not found, skipping: {path.name}")
+        return None
+
+    cmd = ["ffmpeg", "-y", "-hide_banner", "-loglevel", "error", "-i", str(path)]
+    if max_sec:
+        cmd += ["-t", str(max_sec),
+                "-af", f"afade=t=out:st={max(0.0, max_sec - 0.3):.2f}:d=0.3"]
+    cmd += ["-ar", str(sample_rate), "-ac", "1", "-f", "s16le", "pipe:1"]
+
+    try:
+        result = subprocess.run(cmd, capture_output=True, timeout=30)
+        if result.returncode == 0 and result.stdout:
+            return result.stdout
+        print(f"    WARNING: ffmpeg failed to decode SFX {path.name}")
+    except (FileNotFoundError, subprocess.TimeoutExpired):
+        print(f"    WARNING: ffmpeg unavailable, skipping SFX {path.name}")
+    return None
+
+
+def build_phone_sfx_wav(timing, sample_rate=44100):
+    """Build the phone ring + pickup cue as a single WAV. None if unavailable."""
+    ring = load_sfx_pcm(ASSETS / "phone-ringing.mp3", sample_rate,
+                        timing.get("phone_ring_sec", 5.0))
+    pickup = load_sfx_pcm(ASSETS / "phone-pick-up.mp3", sample_rate)
+    frames = b"".join(p for p in (ring, pickup) if p)
+    if not frames:
+        return None
+    return pcm_to_wav(frames, sample_rate)
 
 
 def wav_to_mp3(wav_bytes, mp3_path, bitrate="192k"):
@@ -341,26 +403,16 @@ def build_speaker_roles(part):
     return roles
 
 
-def split_transcript_for_midbreak(lines, part_no):
-    """Split transcript lines into two halves for mid-section break.
+def split_transcript_for_midbreak(part, part_no):
+    """Split a part's spoken content into the two halves of the recording.
 
-    Parts 1-3 get a mid-section break. Part 4 does not.
-    Returns (first_half, second_half) or (all_lines, []) for part 4.
+    The boundary is anchored on the answer text by midbreak.mid_break_for, so
+    it always lands where the narrator says it does. Returns (first_half,
+    second_half) as (speaker, text) pairs; second_half is empty when the part
+    plays straight through (Part 4, or a part with no usable split point).
     """
-    if part_no == 4:
-        return lines, []
-
-    content_lines = [(s, t) for s, t in lines if s.lower() != "narrator"]
-    if len(content_lines) <= 4:
-        return lines, []
-
-    # Split at the midpoint of content
-    mid = len(content_lines) // 2
-    narrator_lines = [(s, t) for s, t in lines if s.lower() == "narrator"]
-    first_half = narrator_lines + content_lines[:mid]
-    second_half = content_lines[mid:]
-
-    return first_half, second_half
+    resolved = mid_break_for(part, part_no)
+    return resolved.half1, resolved.half2
 
 
 def build_multispeaker_text(lines, voice_assigner, speaker_roles):
@@ -410,26 +462,38 @@ def build_multispeaker_text(lines, voice_assigner, speaker_roles):
 # ---------------------------------------------------------------------------
 
 def get_part_question_ranges(part_no, part):
-    """Determine question ranges for the two halves of a part."""
-    groups = part.get("question_groups", [])
-    q_from = (part_no - 1) * 10 + 1
-    q_to = part_no * 10
+    """Question ranges for the two halves of a part.
 
-    if part_no == 4:
-        # Part 4 has no mid-break
-        return q_from, q_to, q_to, q_to
+    Comes from the same resolver as the audio split, so the narrator can never
+    announce a boundary the recording does not honour. A part with no mid-break
+    collapses to q_mid == q_mid_next == q_to, and the narrator announces the
+    whole part in one go.
 
-    if len(groups) >= 2:
-        # Use exact question group boundary
-        first_group = groups[0]
-        q_from = first_group.get("from", q_from)
-        q_mid = first_group.get("to", q_from + 4)
-        q_mid_next = q_mid + 1
-    else:
-        q_mid = q_from + 4
-        q_mid_next = q_mid + 1
+    Imported by build_timeline.py and render_screens.py - keep the 4-tuple.
+    """
+    resolved = mid_break_for(part, part_no)
+    return resolved.q_from, resolved.q_mid, resolved.q_mid_next, resolved.q_to
 
-    return q_from, q_mid, q_mid_next, q_to
+
+# The model is asked for just "the scene" (PART_SCHEMA: "the 'You will hear ...'
+# line"), but routinely tacks its own prep-time sentence onto the end anyway
+# ("...renting a plot. You now have 30 seconds to read questions 1 to 6."). The
+# narrator_scripts.situation template already appends its own timing line, so
+# left in, the model's copy produces a doubled, garbled instruction: "...6..
+# First, you have some time to look at questions 1 to 6."
+_PREP_TIME_SENTENCE_RE = re.compile(
+    r"you (?:now )?(?:have|will have).{0,80}?"
+    r"(?:time|seconds?|minutes?).{0,80}?"
+    r"(?:questions?|read|look at|listen)",
+    re.IGNORECASE,
+)
+
+
+def _strip_prep_time_sentence(situation):
+    """Drop the model's own 'you have time to read/look at questions' sentence."""
+    sentences = re.split(r"(?<=[.!?])\s+", situation)
+    kept = [s for s in sentences if not _PREP_TIME_SENTENCE_RE.search(s)]
+    return " ".join(kept).strip()
 
 
 def narrator_situation(config, part_no, part):
@@ -439,6 +503,7 @@ def narrator_situation(config, part_no, part):
     situation = str(part.get("situation", "")).strip()
     if situation.lower().startswith("you will hear"):
         situation = situation[len("you will hear"):].strip()
+    situation = _strip_prep_time_sentence(situation).rstrip(" .")
 
     if not situation:
         topic = part.get("topic", f"Part {part_no}")
@@ -446,7 +511,7 @@ def narrator_situation(config, part_no, part):
                      else f"a talk about {topic}")
 
     return scripts.get("situation", "").format(
-        situation=situation, q_from=q_from, q_mid=q_mid)
+        situation=situation, q_from=q_from, q_mid=q_mid, part_number=part_no)
 
 
 def narrator_now_listen(config, part_no, part, first_half=True):
@@ -523,11 +588,22 @@ def assemble_part(tts, config, part_no, part, voice_assigner, seg_dir):
 
     print(f"\n  Part {part_no}:")
 
-    all_lines = parse_transcript_lines(part)
     speaker_roles = build_speaker_roles(part)
-    first_half, second_half = split_transcript_for_midbreak(all_lines, part_no)
+    resolved = mid_break_for(part, part_no)
+    first_half, second_half = resolved.half1, resolved.half2
+    print("    " + describe_mid_break(resolved, part_no))
+    for warning in resolved.warnings:
+        print("    ! {}".format(warning))
+
+    gap = timing.get("narrator_gap_sec", 3)
 
     wavs = []
+
+    def add_gap():
+        """Breathing room where speech abuts speech (never next to a long silence)."""
+        if gap > 0:
+            wavs.append(make_silence_wav(gap, sr))
+            print(f"    [silence: {gap}s gap]")
 
     # 1. Narrator: situation intro
     text = narrator_situation(config, part_no, part)
@@ -548,9 +624,21 @@ def assemble_part(tts, config, part_no, part, voice_assigner, seg_dir):
         save_wav(wav, seg_dir / f"part_{part_no}_02_narrator_listen.wav")
         wavs.append(wav)
 
+    add_gap()
+
+    # 4a. Phone ring + pickup, when this part's scene is a phone call
+    if part.get("audio_cues", {}).get("phone_call"):
+        sfx = build_phone_sfx_wav(timing, sr)
+        if sfx:
+            save_wav(sfx, seg_dir / f"part_{part_no}_02b_sfx_phone.wav")
+            wavs.append(sfx)
+            print(f"    [sfx: phone ring + pickup "
+                  f"({read_wav_params(sfx)['duration_sec']:.1f}s)]")
+
     # 4. Dialogue first half
-    dialogue_lines = first_half if second_half else all_lines
-    content = [(s, t) for s, t in dialogue_lines if s.lower() != "narrator"]
+    # half1 is the whole part when there is no mid-break, and never contains
+    # narrator lines.
+    content = list(first_half)
     if content:
         tagged, vids = build_multispeaker_text(content, voice_assigner,
                                                 speaker_roles)
@@ -558,6 +646,8 @@ def assemble_part(tts, config, part_no, part, voice_assigner, seg_dir):
             wav = synth_dialogue(tts, config, tagged, vids, f"P{part_no} dial-1")
             save_wav(wav, seg_dir / f"part_{part_no}_03_dialogue_1.wav")
             wavs.append(wav)
+
+    add_gap()
 
     # 5. Mid-section break (Parts 1-3 only)
     if second_half:
@@ -577,6 +667,8 @@ def assemble_part(tts, config, part_no, part, voice_assigner, seg_dir):
             save_wav(wav, seg_dir / f"part_{part_no}_05_narrator_listen2.wav")
             wavs.append(wav)
 
+        add_gap()
+
         content2 = [(s, t) for s, t in second_half if s.lower() != "narrator"]
         if content2:
             tagged, vids = build_multispeaker_text(content2, voice_assigner,
@@ -586,6 +678,8 @@ def assemble_part(tts, config, part_no, part, voice_assigner, seg_dir):
                                      f"P{part_no} dial-2")
                 save_wav(wav, seg_dir / f"part_{part_no}_06_dialogue_2.wav")
                 wavs.append(wav)
+
+        add_gap()
 
     # 6. Narrator: end of part
     text = narrator_end_part(config, part_no)

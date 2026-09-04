@@ -69,13 +69,13 @@ def parse_args(argv=None):
     
     # Stage 1 options (generate_test.py)
     g_stage1 = parser.add_argument_group("Stage 1 (Test Paper Generation)")
-    g_stage1.add_argument("--band", default="7.0", help="Target band score (e.g. 7.0, 7.5)")
+    g_stage1.add_argument("--band", default="9.0", help="Target band score (e.g. 7.0, 7.5)")
     g_stage1.add_argument("--difficulty", default="", help='Difficulty label (defaults to "IELTS <band>")')
     g_stage1.add_argument("--context", default="academic", choices=["academic", "general"], help="Test context")
     g_stage1.add_argument("--topics", default="", help="Comma-separated topic hints for the 4 parts")
     g_stage1.add_argument("--provider", default="gemini", choices=["nvidia", "gemini"], help="LLM API provider")
     g_stage1.add_argument("--model", default="deepseek-ai/deepseek-v4-flash-0731", help="NVIDIA NIM model ID")
-    g_stage1.add_argument("--gemini-model", default="gemini-3.1-flash-lite", help="Gemini model ID")
+    g_stage1.add_argument("--gemini-model", default="gemini-3.5-flash-lite", help="Gemini model ID")
     g_stage1.add_argument("--skip-verify", action="store_true", help="Skip LLM verification agent pass (faster)")
 
     # Pipeline controls

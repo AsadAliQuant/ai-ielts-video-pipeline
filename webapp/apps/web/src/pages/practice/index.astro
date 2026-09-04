@@ -1,0 +1,66 @@
+---
+import "@workspace/ui/globals.css"
+import { Badge } from "@workspace/ui/components/badge"
+import { env } from "cloudflare:workers"
+
+interface TestRow {
+  slug: string
+  title: string
+  target_band: string
+  context: string
+  part_topics: string
+  duration_sec: number
+}
+
+const { results } = await env.DB
+  .prepare(
+    `SELECT slug, title, target_band, context, part_topics, duration_sec
+     FROM tests WHERE status = 'published' ORDER BY created_at DESC`
+  )
+  .all<TestRow>()
+
+const tests = results.map((r: TestRow) => ({
+  ...r,
+  partTopics: JSON.parse(r.part_topics) as Record<string, string>,
+}))
+---
+
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width" />
+    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <title>Practice tests — IELTS Listening</title>
+  </head>
+  <body>
+    <main class="mx-auto max-w-3xl space-y-6 p-6">
+      <div>
+        <h1 class="text-2xl font-semibold">Listening practice tests</h1>
+        <p class="text-muted-foreground">{tests.length} tests available. Pick one and start.</p>
+      </div>
+
+      {tests.length === 0 && (
+        <p class="text-muted-foreground">No tests published yet — check back soon.</p>
+      )}
+
+      <div class="grid gap-3 sm:grid-cols-2">
+        {tests.map((t) => (
+          <a
+            href={`/practice/${t.slug}`}
+            class="block space-y-2 rounded-lg border p-4 transition-colors hover:bg-muted/50"
+          >
+            <div class="flex items-center justify-between gap-2">
+              <h2 class="font-medium">{t.title}</h2>
+              <Badge variant="secondary">Band {t.target_band}</Badge>
+            </div>
+            <ul class="space-y-0.5 text-sm text-muted-foreground">
+              {Object.entries(t.partTopics).map(([part, topic]) => (
+                <li>Part {part}: {topic}</li>
+              ))}
+            </ul>
+          </a>
+        ))}
+      </div>
+    </main>
+  </body>
+</html>

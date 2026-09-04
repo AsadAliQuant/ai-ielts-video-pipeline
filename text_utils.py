@@ -1,14 +1,32 @@
-"""Small text helpers shared by the renderers and the YouTube uploader.
+"""Small text helpers shared by the generator, the renderers and the uploader.
 
 Kept separate from render_screens.py so youtube_upload.py can import it without
-pulling in Playwright.
+pulling in Playwright, and so midbreak.py can import it without pulling in the
+LLM client stack that generate_test.py carries.
 """
 
 from __future__ import annotations
 
 import re
+import unicodedata
 
 DEFAULT_TITLE = "IELTS Academic Listening Practice Test"
+
+
+def norm(text):
+    """Lowercase, strip accents/punctuation/currency, collapse whitespace."""
+    s = unicodedata.normalize("NFKD", str(text))
+    s = "".join(c for c in s if not unicodedata.combining(c))
+    s = s.replace("’", "'").replace("‘", "'")
+    s = s.lower()
+    s = re.sub(r"[^a-z0-9' ]+", " ", s)
+    return re.sub(r"\s+", " ", s).strip()
+
+
+def find_phrase(haystack, needle, start=0):
+    """Position of needle in haystack matching at word boundaries only, else -1."""
+    m = re.compile(r"(?<!\S)" + re.escape(needle) + r"(?!\S)").search(haystack, start)
+    return m.start() if m else -1
 
 # Band artifacts an LLM-authored title tends to carry: "Band 7.0", "Target
 # Band: 7", "(Band 7.5)", or a bare trailing "7.0" as in the real generated

@@ -534,6 +534,36 @@ def render_group_html(group: dict, questions: list[dict], visuals_map: dict[str,
     return "\n".join(out)
 
 
+def fit_content(page, min_zoom: float = 0.55, passes: int = 4) -> float:
+    """Shrink .content-body until it fits inside the fixed-height paper container.
+
+    .paper-container is overflow:hidden with no fit logic, so a question-heavy
+    part (two groups plus MCQ options) silently clips the last questions. That
+    was tolerable when the full-part page only showed during the 30s checking
+    window; now that it is the part's only screen, a clipped page means
+    unanswerable questions.
+
+    Uses CSS zoom rather than transform:scale — zoom re-runs layout so text
+    rewraps and the measurement converges, whereas a transform would just scale
+    a still-overflowing box. Iterates because rewrapping changes the height
+    needed. Returns the applied zoom.
+    """
+    zoom = 1.0
+    for _ in range(passes):
+        need, avail = page.evaluate(
+            "() => { const b = document.querySelector('.content-body');"
+            "  return b ? [b.scrollHeight, b.clientHeight] : [0, 1]; }")
+        if not need or need <= avail:
+            break
+        zoom = max(min_zoom, zoom * (avail / need) * 0.98)
+        page.evaluate(
+            "z => { document.querySelector('.content-body').style.zoom = z; }",
+            zoom)
+        if zoom <= min_zoom:
+            break
+    return zoom
+
+
 def build_page_html(content_html: str, part_num: int | None = None,
                     q_from: int | None = None, q_to: int | None = None,
                     situation: str = "") -> str:
@@ -702,8 +732,11 @@ def render_screens(test_dir: str | Path, force_visuals: bool = False) -> dict:
             page.set_content(html_str)
             page.evaluate("document.fonts.ready")  # Inter must be live before capture
             page.wait_for_timeout(100)  # Brief settle for layout
+            zoom = fit_content(page)
             page.screenshot(path=str(out_file))
-            print(f"  -> Captured screen: {out_file.name} [{screen_type}] (Q{q_from}–Q{q_to})")
+            fit_note = f" [fit {zoom:.2f}]" if zoom < 0.999 else ""
+            print(f"  -> Captured screen: {out_file.name} [{screen_type}] "
+                  f"(Q{q_from}–Q{q_to}){fit_note}")
             screens_manifest.append({
                 "id": screen_id,
                 "type": screen_type,
@@ -726,56 +759,8 @@ def render_screens(test_dir: str | Path, force_visuals: bool = False) -> dict:
             groups = part.get("question_groups", [])
             situation = str(part.get("situation", "")).strip()
 
-            # Generate screen for each half / group
-            # First half
-            first_half_groups = [g for g in groups if int(g.get("to", q_mid)) <= q_mid or g == groups[0]]
-            # If visual is present in first group
-            first_visual_id = str(first_half_groups[0].get("visual_id") or "") if first_half_groups else ""
-            first_img_path = visuals_map.get(first_visual_id)
-
-            g1_html = "".join(render_group_html(g, questions, visuals_map) for g in first_half_groups)
-            if first_img_path and first_img_path.exists():
-                b64 = image_to_base64(first_img_path)
-                content1 = f"""
-                <div class="split-layout">
-                    <div class="visual-col"><img src="{b64}" class="visual-img" /></div>
-                    <div class="questions-col">{g1_html}</div>
-                </div>
-                """
-            else:
-                content1 = g1_html
-
-            p_h1_html = build_page_html(content1, part_no, q_from, q_mid, situation)
-            capture(f"part_{part_no}_q{q_from}_{q_mid}", p_h1_html, part_num=part_no,
-                    q_from=q_from, q_to=q_mid, screen_type="questions")
-
-            # Second half (if mid-break exists)
-            if part_no < 4 and len(groups) >= 2:
-                second_half_groups = [g for g in groups if g not in first_half_groups]
-                if not second_half_groups and len(groups) > 1:
-                    second_half_groups = groups[1:]
-
-                if second_half_groups:
-                    second_visual_id = str(second_half_groups[0].get("visual_id") or "")
-                    second_img_path = visuals_map.get(second_visual_id)
-                    g2_html = "".join(render_group_html(g, questions, visuals_map) for g in second_half_groups)
-
-                    if second_img_path and second_img_path.exists():
-                        b64 = image_to_base64(second_img_path)
-                        content2 = f"""
-                        <div class="split-layout">
-                            <div class="visual-col"><img src="{b64}" class="visual-img" /></div>
-                            <div class="questions-col">{g2_html}</div>
-                        </div>
-                        """
-                    else:
-                        content2 = g2_html
-
-                    p_h2_html = build_page_html(content2, part_no, q_mid_next, q_to, situation)
-                    capture(f"part_{part_no}_q{q_mid_next}_{q_to}", p_h2_html, part_num=part_no,
-                            q_from=q_mid_next, q_to=q_to, screen_type="questions")
-
-            # Full-part review screen for checking time (Q_from to Q_to)
+            # One screen per part: every question in the part stays visible for
+            # the part's full duration, the way a candidate holds the booklet.
             all_groups_html = "".join(render_group_html(g, questions, visuals_map) for g in groups)
             # If visual exists in any group, split layout
             any_vis = None
@@ -798,7 +783,7 @@ def render_screens(test_dir: str | Path, force_visuals: bool = False) -> dict:
 
             p_all_html = build_page_html(full_content, part_no, q_from, q_to, situation)
             capture(f"part_{part_no}_all", p_all_html, part_num=part_no,
-                    q_from=q_from, q_to=q_to, screen_type="checking")
+                    q_from=q_from, q_to=q_to, screen_type="questions")
 
         # 3. Answer Key Screen
         ak_html = render_answer_key_screen(test_data)
