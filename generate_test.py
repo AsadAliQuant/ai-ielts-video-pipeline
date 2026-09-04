@@ -230,7 +230,9 @@ class LLM:
             {"role": "user", "content": user},
         ]
         last_error = None
-        for bi in range(self.backend_index, len(self.backends)):
+        n = len(self.backends)
+        order = [(self.backend_index + i) % n for i in range(n)]
+        for pos, bi in enumerate(order):
             backend = self.backends[bi]
             attempt = 0
             while attempt < 3:
@@ -293,9 +295,9 @@ class LLM:
                         print("    ! {} API error ({}) - retrying in {}s".format(
                             backend.name, text[:120], wait))
                         time.sleep(wait)
-            if bi < len(self.backends) - 1:
+            if pos < len(order) - 1:
                 print("    ! {} unavailable - falling back to {}".format(
-                    backend.name, self.backends[bi + 1].name))
+                    backend.name, self.backends[order[pos + 1]].name))
         raise RuntimeError("API call failed on every backend ({}): {}".format(
             label or "call", last_error))
 

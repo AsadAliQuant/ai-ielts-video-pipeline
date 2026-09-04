@@ -52,8 +52,9 @@ jobs:
 
       - name: Locate generated test dir
         id: testdir
+        if: always()
         run: |
-          DIR=$(ls -d tests/test_* | sort | tail -n 1)
+          DIR=$(ls -d tests/test_* 2>/dev/null | sort | tail -n 1)
           echo "dir=$DIR" >> "$GITHUB_OUTPUT"
           echo "Generated: $DIR"
 
@@ -87,7 +88,7 @@ jobs:
         run: python youtube_upload.py "${{ steps.testdir.outputs.dir }}"
 
       - name: Upload run artifacts on failure
-        if: failure()
+        if: failure() && steps.testdir.outputs.dir != ''
         uses: actions/upload-artifact@v4
         with:
           name: failed-run-${{ github.run_id }}
