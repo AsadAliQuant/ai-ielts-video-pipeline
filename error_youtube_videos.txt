@@ -1,0 +1,81 @@
+1. remove target bank 7.0 from video.
+2. remove band 7.0 from all video title, description, introduction part and everywhere inside video as well
+3. the fonts in the video (Part 1, Questions 1- 6, Now listening, narrator , etc) at the top bar are very thin and not like they were in this my pc testing. there is somthing wrong in the gitbhu actions.
+
+
+part 1: 
+
+fix audio for narrator, calling participants, and all types for all tts FREE types we can use. 11labs, fishaudio, lmnt.com, deepgram
+
+
+- add 5 sec time space between introduction and part 1 narration speech audio.
+- narrator voice should be slow (currently its 1.0 and it should be around 0.75-0.8)
+- add short phone ringing and phone pickup audio before converstaion starts
+
+3 sec space between conversation stop like from q1-6 [there should be 3 sec gap between all audio playing (like conversation between people) before and after of narrator speaks]
+
+15 sec wait to see questions next 2nd set within same part 1 like q7-10
+
+3 sec space time bwtween conversation starts for next question set within same part like q7-10 [there should be 3 sec gap between all audio playing (like conversation between people) before and after of narrator speaks]
+
+
+audio volume fades-out at the end of phone conversation
+
+
+there should be 3 sec gap between all audio playing (like conversation between people) before and after of narrator speaks
+
+
+whole questions for single part should be visible in 1 screen only. currently q1-10 are divided into 2 screens and 2nd screen(with q7-10) shows only when the audio for it plays. dont do this.
+
+
+yt settings:
+
+for video thumbnail creation cehck [https://www.youtube.com/@IeltsPracticeTestResources/videos] [https://www.youtube.com/@TheIELTSListeningTest]
+
+
+video title like this: IELTS LISTENING PRACTICE TEST 2026 WITH ANSWERS | 01.09.2026
+
+descriptuion kike this: 
+
+
+[In ielts listening test video, we are providing you with a listening practice test in order to help you prepare for the IELTS Listening Test 2026. This practice test has the same structure as the actual test, so if you are able to pass it, you are well on your way to a successful score.
+
+If you are interested in taking the IELTS Listening Test, then be sure to check out this video. We will provide you with a listening practice test so that you can prepare for the test and achieve a high score. Thanks for watching!
+
+The IELTS Listening Test IELTS Candidate DO LISTENING TEST IMPROVE YOUR SKILLS :- You will be given time to read through the questions before you listen.  You will hear each recording of the Listening test only once.
+As you listen, write your answers on the question paper. At the end of the test, you will have 10 minutes to transfer your answers to the answer sheet in pencil. You may write your answers in lower case or capital letters.
+Instructions to candidates
+In the actual test you will be given the following instructions:
+do not open this question paper until you are told to do so
+write your name and candidate number in the spaces at the top of this page listen to the instructions for each part of the paper carefully
+answer all the questions
+
+while you are listening, write your answers on the question paper
+you will have 10 minutes at the end of the test to copy your answers onto the separate answer sheet use a pencil At the end of the test you will be asked to hand in the question paper.
+
+
+#ieltslistening #ielts2026  #ieltslisteningpracticetest2025 #ieltsexam  #ielts ‪@TheIELTSListeningTest‬
+
+ielts preparation
+the ielts listening test 2026
+practice listening test
+listening test ielts
+ielts practice listening test
+ielts test listening
+listening 2026 test new
+ielts listening test
+listening 2026 practice test
+listening test 2026
+listening 2026 ielts video
+Ielts Listening Practice
+listening ielts listening 
+listening test
+listening 2025 practice 
+practice listening
+listening ielts 2026
+
+
+
+@Copyrighted - Team IELTS Dream @TheIELTSListeningTest
+
+]
