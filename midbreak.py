@@ -245,6 +245,36 @@ def _turn_boundaries(units):
     return {i for i in range(1, len(units)) if units[i].turn != units[i - 1].turn}
 
 
+def split_is_valid(units, positions, q_mid, split):
+    """True when `split` keeps every answer on its own side and clears the
+
+    minimum half size. The one definition of "a legal split point" - used to
+    validate both `_choose_split`'s own pick and an externally supplied
+    (LLM-labelled) boundary.
+    """
+    if split is None or not 1 <= split <= len(units) - 1:
+        return False
+    for number, index in positions.items():
+        if number <= q_mid and index >= split:
+            return False
+        if number > q_mid and index < split:
+            return False
+    floor = max(2, int(round(len(units) * 0.12)))
+    return min(split, len(units) - split) >= floor
+
+
+def split_for_boundary_turn(units, boundary_turn):
+    """Convert a transcript turn index into a split index.
+
+    The split lands right before the first unit at or after `boundary_turn`,
+    so that turn (and everything after it) falls in the second half. None if
+    `boundary_turn` is missing or past the end of the transcript.
+    """
+    if boundary_turn is None:
+        return None
+    return next((i for i, u in enumerate(units) if u.turn >= boundary_turn), None)
+
+
 def _choose_split(units, positions, how, q_from, q_mid, q_to):
     """Pick a split index, or None when no index can satisfy the invariant.
 
@@ -284,9 +314,8 @@ def _choose_split(units, positions, how, q_from, q_mid, q_to):
     # A half of one or two sentences is never a real IELTS break - it means the
     # anchors are noise (a stray evidence match near the end of the part). Fall
     # back to the proportional target inside the same window before giving up.
-    floor = max(2, int(round(count * 0.12)))
-    if min(split, count - split) < floor:
-        roomy = [s for s in valid if min(s, count - s) >= floor]
+    if not split_is_valid(units, positions, q_mid, split):
+        roomy = [s for s in valid if split_is_valid(units, positions, q_mid, s)]
         if not roomy:
             return None, "none", "none"
         split, resolved_by = by_target(roomy), "proportional"
@@ -304,8 +333,14 @@ def _no_break(q_from, q_to, units, warnings):
                     resolved_by="none", cut="none", warnings=warnings)
 
 
-def resolve_mid_break(part, part_no):
+def resolve_mid_break(part, part_no, boundary_turn=None):
     """Resolve a part's mid-section break from its answers and transcript.
+
+    `boundary_turn`, when given, names the transcript turn that opens the
+    second question group (see split_labeler.py). It wins over the
+    answer-anchored heuristic below whenever it converts to a split index
+    that still satisfies the no-crossing invariant and the minimum half
+    size; otherwise this falls through to that heuristic unchanged.
 
     `split is None` means this part gets no mid-break, and the question ranges
     collapse to the whole part so the narrator never promises a break that the
@@ -322,8 +357,13 @@ def resolve_mid_break(part, part_no):
                           .format(part_no)])
 
     positions, how = anchor_map(part, units)
-    split, resolved_by, cut = _choose_split(units, positions, how,
-                                            q_from, q_mid, q_to)
+
+    llm_split = split_for_boundary_turn(units, boundary_turn)
+    if llm_split is not None and split_is_valid(units, positions, q_mid, llm_split):
+        split, resolved_by, cut = llm_split, "llm", "turn"
+    else:
+        split, resolved_by, cut = _choose_split(units, positions, how,
+                                                q_from, q_mid, q_to)
 
     warnings = []
     unresolved = [a["number"] for a in (part.get("answers") or [])
@@ -365,9 +405,9 @@ def _anchor_text(unit):
     return " ".join(norm(unit.text).split()[-_ANCHOR_WORDS:])
 
 
-def annotate_mid_break(part, part_no):
+def annotate_mid_break(part, part_no, boundary_turn=None):
     """Build the audio_cues.mid_break record for a part (None when no break)."""
-    resolved = resolve_mid_break(part, part_no)
+    resolved = resolve_mid_break(part, part_no, boundary_turn=boundary_turn)
     if resolved.split is None:
         return None, resolved
 

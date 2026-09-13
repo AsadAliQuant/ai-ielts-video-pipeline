@@ -30,8 +30,9 @@ except ImportError:
 
 from generate_visual import process_test_visuals
 from midbreak import (LETTER_ANSWER_TYPES, annotate_mid_break,
-                      describe_mid_break, resolve_mid_break)
+                      describe_mid_break, question_ranges, resolve_mid_break)
 from text_utils import find_phrase, norm
+import split_labeler
 
 NVIDIA_BASE_URL = "https://integrate.api.nvidia.com/v1"
 GEMINI_BASE_URL = "https://generativelanguage.googleapis.com/v1beta/openai/"
@@ -449,7 +450,7 @@ Hard rules for this part:
 - Never write an answer into "layout", "instruction", "heading", a question's "text", the "mermaid" code, or the "image_prompt". Mermaid shows blanks only - [A], [B] or the bare question number - never the correct label.
 - The transcript is TTS-ready spoken English only: no question numbers, no answer markers, no bracketed stage directions, no teacher notes. Open with a short Narrator line, then natural dialogue or lecture.
 - Keep the transcript within the length guidance in section 11 of your instructions.
-- The recording is played in two halves with a pause between them, split at the boundary between the first question group and the second. Pace the speech so the first group's answers occupy roughly the first 55-65% of the spoken content, and none of the later groups' answers are spoken before that point.
+- The recording is played in two halves with a pause between them, split at the boundary between the first question group and the second. Pace the speech so the first group's answers occupy roughly the first 55-65% of the spoken content, and none of the later groups' answers are spoken before that point. The turn that first asks about or introduces a later group's topic counts as belonging to that later group, even though its answer is spoken afterward - so end the first group's dialogue on a natural closing turn (a wrap-up, thanks, or transition line), never on a question that leads into the next group.
 """
 
 VERIFIER_SYSTEM = """You are an independent IELTS Listening quality assurance examiner.
@@ -1609,7 +1610,7 @@ def detect_phone_call(part):
     return any(hint in blob for hint in PHONE_HINTS)
 
 
-def annotate_audio_cues(test):
+def annotate_audio_cues(test, llm=None):
     """Tag each part with the audio cues Stage 2 needs.
 
     Runs from write_outputs, after every repair and verification round-trip, so
@@ -1617,18 +1618,39 @@ def annotate_audio_cues(test):
     ships. mid_break is null for Part 4 and for any part with no usable split
     point; Stage 2 then plays that part straight through and the narrator
     announces the whole question range at once.
+
+    When `llm` is given, parts 1-3 first ask split_labeler to name the turn
+    that opens the second question group - the fix for the answer-anchored
+    heuristic always landing the break between a question and its answer. A
+    labeler failure or rejection falls back to that heuristic, loudly (a `!`
+    line here), so the regression shows up in this log rather than only in
+    the finished video.
     """
     for part_no, part in enumerate(as_list(test.get("parts")), start=1):
         cues = part.setdefault("audio_cues", {})
         cues["phone_call"] = detect_phone_call(part)
-        record, resolved = annotate_mid_break(part, part_no)
+
+        boundary_turn = None
+        use_labeler = llm is not None and part_no in (1, 2, 3)
+        q_mid = question_ranges(part, part_no)[1] if use_labeler else None
+        if use_labeler:
+            try:
+                boundary_turn = split_labeler.label_boundary(llm, part, part_no, q_mid)
+            except Exception as exc:                        # noqa: BLE001
+                print("  ! part {}: labeler call failed ({})".format(part_no, exc))
+
+        record, resolved = annotate_mid_break(part, part_no, boundary_turn=boundary_turn)
         cues["mid_break"] = record
         print("  part {}: {}".format(part_no, describe_mid_break(resolved, part_no)))
+        if use_labeler and boundary_turn is None:
+            print("  ! part {}: mid-break fell back to {}; question {}'s lead-in "
+                  "may play in the first half".format(part_no, resolved.resolved_by,
+                                                       q_mid + 1))
 
 
-def write_outputs(test, out_dir):
+def write_outputs(test, out_dir, llm=None):
     out_dir.mkdir(parents=True, exist_ok=True)
-    annotate_audio_cues(test)
+    annotate_audio_cues(test, llm=llm)
     visual_files = []
     try:
         visual_files = process_test_visuals(test, out_dir)
@@ -1747,7 +1769,7 @@ def main(argv=None):
 
     out_dir = next_output_dir(Path(args.out) if Path(args.out).is_absolute()
                               else ROOT / args.out)
-    written = write_outputs(test, out_dir)
+    written = write_outputs(test, out_dir, llm=llm)
     print_summary(test, out_dir, written, llm)
     return 0
 
