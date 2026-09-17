@@ -39,13 +39,26 @@ python generate_video.py tests/test_007                     # full MoviePy v2 pa
 python generate_video.py tests/test_007 --fast --skip-visuals --output out.mp4
 ```
 
-Batch Generation — run pipeline end-to-end for N tests:
+Stage 4 — YouTube description & upload:
 ```bash
-python batch_generate.py 3                             # batch generate 3 full tests (Stages 1..3)
-python batch_generate.py 5 --band 7.5 --skip-verify   # 5 tests, band 7.5, fast Stage 1
-python batch_generate.py 2 --stage 1                  # generate 2 test papers only
-python batch_generate.py 3 --dry-run                   # preview planned execution commands
+python generate_youtube_description.py tests/test_007       # deterministic 0-AI description generator
+python youtube_upload.py tests/test_007                     # upload video + custom description & thumbnail
 ```
+
+Batch Generation & End-to-End Pipeline:
+```bash
+python run_pipeline.py                                   # 1 test, Band 9.0, ChatGPT image prompt pause, video, YouTube upload
+python run_pipeline.py --band 8.5                        # custom band score
+python run_pipeline.py --skip-verify                     # fast Stage 1 (~10-15 min)
+python run_pipeline.py --count 3                         # 3 tests sequentially
+python batch_generate.py 1 --chatgpt --upload --fast     # full pipeline via batch_generate
+python batch_generate.py 3                               # batch generate 3 full tests (Stages 1..3)
+python batch_generate.py 5 --band 7.5 --skip-verify      # 5 tests, band 7.5, fast Stage 1
+python batch_generate.py 2 --stage 1                     # generate 2 test papers only
+python batch_generate.py 3 --dry-run                     # preview planned execution commands
+```
+
+See `CHATGPT_IMAGE_YOUTUBE_PIPELINE.md` for the full terminal workflow guide.
 
 There is no lint/test/build tooling configured (no pytest config, no linter). `tests/` is
 pipeline **output** (generated exam runs), not a unit test suite — don't confuse the two.
@@ -73,7 +86,8 @@ Three independently runnable stages, each consuming the previous stage's output 
    `render_screens.py` renders exam paper pages via Playwright/Chromium to 1080p PNGs;
    `generate_video.py` is the coordinator — bakes ticking HUD/countdown frames onto the base
    screenshots with Pillow, then muxes audio+frames via MoviePy v2 (default) or an FFmpeg
-   concat demuxer (`--fast`), and writes `chapters.txt` for YouTube timestamps.
+   concat demuxer (`--fast`), writes `chapters.txt` for YouTube timestamps, and generates
+   `thumbnail.png` via `generate_thumbnail.py`.
 
 Each generated test lives under `tests/test_NNN/` (gitignored) with `test.json` as the single
 source of truth, plus `audio/`, `visuals/`, and `video/` subdirectories mirroring the stage

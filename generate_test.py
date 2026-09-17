@@ -439,6 +439,7 @@ Hard rules for this part:
 - "questions" holds exactly one entry per question number in this part's range, ascending.
 - "answers" holds exactly one entry per question number, ascending.
 - Completion groups (form/note/table/flow-chart/sentence/summary) use "layout": a plain-text block in which each blank is written as {N}, N being the question number. Their questions have "text": "" and "options": [].
+- A flow_chart_completion layout separates each step with a DOUBLE newline (\\n\\n). Do NOT use ASCII arrows (|, v, >, -->) or Unicode arrows between steps. Each step is one plain-text sentence/phrase containing a {N} blank. Example: "First step sentence with {31}.\\n\\nSecond step sentence with {32}.\\n\\nThird step."
 - A table_completion layout must be a GitHub-flavoured markdown table.
 - multiple_choice and multiple_response questions carry their own "options" (3 or 4 each); their answer is the option LETTER ("B", or "B,D" for multiple response).
 - matching groups put the shared list in the GROUP's "options"; each question's "text" is the item being matched and its answer is the option LETTER.

@@ -10,7 +10,10 @@ Builds title/description from test.json + chapters.txt so no manual entry
 is needed.
 """
 import argparse
+from datetime import datetime
 import json
+import os
+import re
 import sys
 from pathlib import Path
 
@@ -20,9 +23,6 @@ from google.oauth2.credentials import Credentials
 from googleapiclient.discovery import build
 from googleapiclient.http import MediaFileUpload
 from googleapiclient.errors import HttpError
-import os
-
-from text_utils import clean_title
 
 load_dotenv()
 
@@ -47,37 +47,38 @@ def build_youtube_client():
     return build("youtube", "v3", credentials=creds)
 
 
-def build_metadata(test_dir: Path):
-    test = json.loads((test_dir / "test.json").read_text(encoding="utf-8"))
-    meta = test["metadata"]
-    topics = meta.get("part_topics", {})
+from generate_youtube_description import generate_youtube_description
 
-    # The target band is an internal generation parameter -- never shown to viewers.
-    title = f"{clean_title(meta.get('title'))} | Full Test with Answers"
+
+def build_metadata(test_dir: Path, custom_title: str | None = None, upload_date: datetime | None = None):
+    test_json_path = test_dir / "test.json"
+    if test_json_path.exists():
+        test = json.loads(test_json_path.read_text(encoding="utf-8"))
+    else:
+        test = {}
+
+    if custom_title:
+        title = custom_title
+    else:
+        dt = upload_date or datetime.now()
+        year = dt.strftime("%Y")
+        date_str = dt.strftime("%d.%m.%Y")
+        title = f"IELTS LISTENING PRACTICE TEST {year} WITH ANSWERS | {date_str}"
+
     if len(title) > 100:
         title = title[:97] + "..."
 
-    topic_lines = "\n".join(f"Part {k}: {v}" for k, v in sorted(topics.items()))
-    chapters_path = test_dir / "video" / "chapters.txt"
-    chapters = chapters_path.read_text(encoding="utf-8") if chapters_path.exists() else ""
-
-    description = (
-        "Full IELTS Listening practice test, generated and narrated end-to-end."
-        f"\n\nTopics covered:\n{topic_lines}\n\n"
-        "Try it yourself before checking the answer key, then use the timestamps below to "
-        "jump to any part.\n\n"
-        f"{chapters}\n\n#IELTS #IELTSListening #IELTSPractice"
-    ).strip()
+    description = generate_youtube_description(test_dir)
 
     return title, description
 
 
-def upload(test_dir: Path):
+def upload(test_dir: Path, custom_title: str | None = None):
     video_path = test_dir / "video" / f"{test_dir.name}.mp4"
     if not video_path.exists():
         sys.exit(f"No rendered video found at {video_path} -- run generate_video.py first.")
 
-    title, description = build_metadata(test_dir)
+    title, description = build_metadata(test_dir, custom_title=custom_title)
     privacy = os.environ.get("YOUTUBE_PRIVACY", "unlisted")
 
     youtube = build_youtube_client()
@@ -85,7 +86,17 @@ def upload(test_dir: Path):
         "snippet": {
             "title": title,
             "description": description,
-            "tags": ["IELTS", "IELTS Listening", "IELTS Practice Test", "English Test"],
+            "tags": [
+                "IELTS",
+                "IELTS Listening",
+                "IELTS Practice Test",
+                "IELTS 2026",
+                "Band 8",
+                "Band 9",
+                "IELTS Listening Test",
+                "English Test",
+                "IELTS Preparation",
+            ],
             "categoryId": "27",  # Education
         },
         "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
@@ -106,11 +117,35 @@ def upload(test_dir: Path):
 
     video_id = response["id"]
     print(f"Uploaded: https://youtu.be/{video_id}")
+
+    # Set custom YouTube thumbnail
+    thumb_path = test_dir / "video" / "thumbnail.png"
+    if not thumb_path.exists():
+        thumb_path = test_dir / "thumbnail.png"
+    if not thumb_path.exists():
+        try:
+            from generate_thumbnail import generate_thumbnail
+            thumb_path = generate_thumbnail(test_dir)
+        except Exception as e:
+            print(f"Warning: Could not auto-generate thumbnail: {e}")
+            thumb_path = None
+
+    if thumb_path and thumb_path.exists():
+        print(f"Setting custom thumbnail from {thumb_path} ...")
+        try:
+            thumb_media = MediaFileUpload(str(thumb_path), mimetype="image/png")
+            youtube.thumbnails().set(videoId=video_id, media_body=thumb_media).execute()
+            print("Custom thumbnail set successfully on YouTube!")
+        except Exception as e:
+            print(f"Warning: Setting custom thumbnail on YouTube failed: {e}")
+
     return video_id
+
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("test_dir", help="Path to test directory (e.g. tests/test_007)")
+    parser.add_argument("--title", help="Override YouTube video title", default=None)
     args = parser.parse_args()
-    upload(Path(args.test_dir))
+    upload(Path(args.test_dir), custom_title=args.title)

@@ -187,18 +187,15 @@ def format_timestamp(seconds: float) -> str:
     mins = (total_sec % 3600) // 60
     secs = total_sec % 60
     if hours > 0:
-        return f"{hours}:{mins:02d}:{secs:02d}"
-    return f"{mins}:{secs:02d}"
+        return f"{hours:02d}:{mins:02d}:{secs:02d}"
+    return f"{mins:02d}:{secs:02d}"
 
 
 def write_youtube_chapters(test_dir: Path, test_data: dict, timeline: dict,
                            ak_start_time: float | None = None) -> Path:
-    """Generate YouTube-compatible chapters.txt."""
-    meta = test_data.get("metadata", {})
-    part_topics = meta.get("part_topics", {})
-    
+    """Generate YouTube-compatible chapters.txt and youtube_description.txt."""
     chapters = []
-    chapters.append("0:00 Introduction")
+    chapters.append("00:00 - Test Instructions")
 
     seen_parts = set()
     for seg in timeline.get("segments", []):
@@ -206,19 +203,23 @@ def write_youtube_chapters(test_dir: Path, test_data: dict, timeline: dict,
         if part_num is not None and part_num not in seen_parts:
             seen_parts.add(part_num)
             start_ts = format_timestamp(seg["start"])
-            topic = part_topics.get(str(part_num))
-            if not topic:
-                part_entry = next((p for p in test_data.get("parts", []) if p.get("part") == part_num), {})
-                topic = part_entry.get("topic", f"Part {part_num}")
-            chapters.append(f"{start_ts} Part {part_num} - {topic}")
+            chapters.append(f"{start_ts} - Section {part_num}")
 
     if ak_start_time is not None:
-        chapters.append(f"{format_timestamp(ak_start_time)} Answer Key Review")
+        chapters.append(f"{format_timestamp(ak_start_time)} - Answer Key")
 
     chapters_path = test_dir / "video" / "chapters.txt"
     chapters_path.write_text("\n".join(chapters) + "\n", encoding="utf-8")
     print(f"\nYouTube Chapters written to: {chapters_path}")
     print("\n".join(chapters))
+
+    try:
+        from generate_youtube_description import generate_youtube_description
+        generate_youtube_description(test_dir)
+        print(f"YouTube Description written to: {test_dir / 'video' / 'youtube_description.txt'}")
+    except Exception as e:
+        print(f"Note: Could not pre-generate youtube_description.txt: {e}")
+
     return chapters_path
 
 
@@ -437,7 +438,16 @@ def generate_video(test_dir: str | Path, fast: bool = False,
     print("\n>>> Step 6: Writing YouTube Chapters")
     write_youtube_chapters(test_dir, test_data, timeline, ak_start_time)
 
+    # Step 7: YouTube Thumbnail
+    print("\n>>> Step 7: Generating YouTube Thumbnail")
+    try:
+        from generate_thumbnail import generate_thumbnail
+        generate_thumbnail(test_dir)
+    except Exception as e:
+        print(f"Warning: Thumbnail generation failed: {e}")
+
     return out_mp4
+
 
 
 if __name__ == "__main__":

@@ -20,6 +20,7 @@ import re
 import subprocess
 import sys
 import time
+import shutil
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent
@@ -46,6 +47,126 @@ def find_latest_test_dir(base_dir: Path) -> Path:
         return int(m.group(1)) if m else -1
 
     return max(test_dirs, key=get_num)
+
+
+def extract_visual_prompts(visuals_md_path: Path):
+    """Parse visuals.md to extract visual ID, title, type, and GenAI image prompt."""
+    if not visuals_md_path.exists():
+        return []
+
+    content = visuals_md_path.read_text(encoding="utf-8")
+    visuals = []
+
+    sections = re.split(r"^##\s+", content, flags=re.MULTILINE)
+    for sec in sections[1:]:
+        lines = sec.strip().splitlines()
+        header = lines[0] if lines else ""
+
+        v_type = re.search(r"\*\*Type:\*\*\s*(.+)", sec)
+        v_title = re.search(r"\*\*Title:\*\*\s*(.+)", sec)
+        v_prompt = re.search(r"\*\*GenAI image prompt\*\*\s*\n\n(.*?)(?=\n\n\*\*|\Z)", sec, re.DOTALL)
+
+        type_str = v_type.group(1).strip() if v_type else "image"
+        title_str = v_title.group(1).strip() if v_title else "Diagram"
+
+        if v_prompt:
+            prompt_text = v_prompt.group(1).strip()
+            if type_str.lower() not in ["flowchart", "table"]:
+                vid_m = re.search(r"\b(v\d+)\b", header)
+                vid = vid_m.group(1) if vid_m else "v1"
+                visuals.append({
+                    "id": vid,
+                    "header": header,
+                    "type": type_str,
+                    "title": title_str,
+                    "prompt": prompt_text
+                })
+
+    return visuals
+
+
+def handle_chatgpt_visuals(test_dir: Path, dry_run: bool = False):
+    """Check visuals.md, display prompts, and pause for image placement."""
+    if dry_run:
+        print(f"  (dry-run: would prompt for ChatGPT visual in {test_dir.name})")
+        return
+
+    visuals_md = test_dir / "visuals.md"
+    visuals = extract_visual_prompts(visuals_md)
+
+    if not visuals:
+        print("\n[INFO] No image visuals required for this test.")
+        return
+
+    visuals_dir = test_dir / "visuals"
+    visuals_dir.mkdir(parents=True, exist_ok=True)
+
+    for vis in visuals:
+        vid = vis["id"]
+        target_path = visuals_dir / f"{vid}.png"
+        root_target_path = test_dir / f"visual_{vid}.png"
+
+        print("\n" + "=" * 76)
+        print(f"  IMAGE PROMPT FOR CHATGPT: {vis['title'].upper()} ({vis['type'].upper()})")
+        print("=" * 76)
+        print(f"Section     : {vis['header']}")
+        print(f"Visual ID   : {vid}")
+        print("\nPrompt to copy into ChatGPT:")
+        print("-" * 76)
+        print(vis['prompt'])
+        print("-" * 76)
+        print(f"\nTarget File Destination:")
+        print(f"  {target_path}")
+        print("=" * 76)
+
+        while True:
+            prompt_msg = (
+                f"\nOptions:\n"
+                f"  1. Paste or drag-and-drop the downloaded image path below\n"
+                f"  2. OR save the file directly to: {target_path} and press Enter\n"
+                f"  3. OR press Enter if downloaded to your Downloads folder\n"
+                f"> Input path or press Enter: "
+            )
+            raw_input = input(prompt_msg).strip().strip('"').strip("'")
+
+            if raw_input:
+                src_path = Path(raw_input)
+                if src_path.exists() and src_path.is_file():
+                    shutil.copy(src_path, target_path)
+                    shutil.copy(src_path, root_target_path)
+                    print(f"\n[OK] Copied {src_path.name} -> {target_path}")
+                    break
+                else:
+                    print(f"\n[ERROR] File not found at: {src_path}")
+                    continue
+
+            if target_path.exists() and target_path.stat().st_size > 0:
+                shutil.copy(target_path, root_target_path)
+                print(f"\n[OK] Found image at {target_path}")
+                break
+
+            downloads_dir = Path.home() / "Downloads"
+            found_download = None
+            if downloads_dir.exists():
+                candidates = sorted(
+                    [p for p in downloads_dir.glob("*.*") if p.suffix.lower() in [".png", ".jpg", ".jpeg"]],
+                    key=lambda p: p.stat().st_mtime,
+                    reverse=True
+                )
+                if candidates:
+                    recent = candidates[0]
+                    if time.time() - recent.stat().st_mtime < 1800:
+                        found_download = recent
+
+            if found_download:
+                confirm = input(f"\nFound recent image in Downloads: '{found_download.name}'. Use this? [Y/n]: ").strip().lower()
+                if confirm in ["", "y", "yes"]:
+                    shutil.copy(found_download, target_path)
+                    shutil.copy(found_download, root_target_path)
+                    print(f"\n[OK] Copied {found_download.name} -> {target_path}")
+                    break
+
+            print(f"\n[WAITING] Image not found yet at {target_path}. Please place or paste it.")
 
 
 def parse_args(argv=None):
@@ -100,6 +221,14 @@ def parse_args(argv=None):
     g_stage3.add_argument("--fast", action="store_true", help="Use fast FFmpeg concat muxer for Stage 3 video")
     g_stage3.add_argument("--skip-visuals", action="store_true", help="Skip calling visual map/diagram generation")
 
+    # Stage 4 options (youtube_upload.py)
+    g_stage4 = parser.add_argument_group("Stage 4 (YouTube Upload)")
+    g_stage4.add_argument("--upload", action="store_true", help="Upload rendered video to YouTube (Stage 4)")
+
+    # Visual controls
+    g_visual = parser.add_argument_group("Visuals")
+    g_visual.add_argument("--chatgpt", "--interactive-visual", dest="chatgpt", action="store_true", help="Pause after Stage 1 to display prompt for ChatGPT and place image")
+
     args = parser.parse_args(argv)
 
     # Positional count takes precedence if given
@@ -109,13 +238,18 @@ def parse_args(argv=None):
     if args.count < 1:
         parser.error("Count must be at least 1")
 
-    # Map stage choices to numerical max stage (1, 2, or 3)
+    # Map stage choices to numerical max stage (1, 2, 3, or 4)
     stage_map = {
         "1": 1, "test": 1,
         "2": 2, "audio": 2,
-        "3": 3, "video": 3, "all": 3,
+        "3": 3, "video": 3,
+        "4": 4, "upload": 4,
+        "all": 4 if args.upload else 3,
     }
-    args.target_stage = stage_map[args.max_stage]
+    if args.upload and args.max_stage in ["all", "3", "video"]:
+        args.target_stage = 4
+    else:
+        args.target_stage = stage_map.get(args.max_stage, 3)
 
     return args
 
@@ -202,6 +336,12 @@ def main(argv=None):
             print(f"[OK] Test paper generated at: {test_dir}")
 
         # -------------------------------------------------------------------
+        # Visual Prompt Hook (if --chatgpt specified)
+        # -------------------------------------------------------------------
+        if args.chatgpt:
+            handle_chatgpt_visuals(test_dir, dry_run=args.dry_run)
+
+        # -------------------------------------------------------------------
         # Stage 2: generate_audio.py (if stage >= 2)
         # -------------------------------------------------------------------
         if args.target_stage >= 2:
@@ -242,6 +382,24 @@ def main(argv=None):
                 continue
             if not args.dry_run:
                 print(f"[OK] Video rendered for: {test_dir.name}")
+
+        # -------------------------------------------------------------------
+        # Stage 4: youtube_upload.py (if stage >= 4 or --upload)
+        # -------------------------------------------------------------------
+        if args.target_stage >= 4 or args.upload:
+            print(f"\n>>> [Test {i}/{args.count}] STAGE 4: Uploading to YouTube ({test_dir.name})")
+            cmd_stage4 = [
+                sys.executable, str(ROOT / "youtube_upload.py"),
+                str(test_dir),
+            ]
+            ret4 = run_command(cmd_stage4, dry_run=args.dry_run)
+            if ret4 != 0:
+                print(f"[FAIL] Stage 4 YouTube upload failed for {test_dir.name}")
+                if args.stop_on_error:
+                    sys.exit(f"Stopping batch execution due to Stage 4 error.")
+                continue
+            if not args.dry_run:
+                print(f"[OK] Video uploaded to YouTube for: {test_dir.name}")
 
         success_count += 1
         print(f"\n[SUCCESS] Completed Test {i}/{args.count}: {test_dir.name}")

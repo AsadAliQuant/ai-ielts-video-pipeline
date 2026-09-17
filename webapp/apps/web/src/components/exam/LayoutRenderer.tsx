@@ -9,6 +9,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@workspace/ui/components/select";
+import { ChevronDown } from "lucide-react";
 import { parseLayout } from "../../lib/layout";
 import { parseWordLimit, wordCount } from "../../lib/wordLimit";
 import type { Question, QuestionGroup, Visual } from "../../lib/types";
@@ -33,6 +34,18 @@ const TEXT_INPUT_TYPES = new Set([
   "summary_completion",
 ]);
 
+/** Split a flowchart layout on ASCII/Unicode arrow delimiters or double-newlines. */
+function splitFlowchartSteps(layout: string): string[] {
+  // Match: \n  (optional spaces)  | or │  \n  (optional spaces)  v or ▼  \n
+  const arrowRe = /\n\s*[|│]\s*\n\s*[v▼]\s*\n/u;
+  let steps = layout.split(arrowRe);
+  // Fallback: double-newline separated (Step N: style)
+  if (steps.length <= 1) {
+    steps = layout.split(/\n{2,}/);
+  }
+  return steps.map((s) => s.trim()).filter(Boolean);
+}
+
 export function LayoutRenderer({
   group,
   questions,
@@ -42,6 +55,45 @@ export function LayoutRenderer({
   currentQuestion,
 }: LayoutRendererProps) {
   const [maxWords] = parseWordLimit(group.instruction);
+
+  // Flowchart: render steps as bordered cards with arrow connectors
+  if (group.type === "flow_chart_completion" && group.layout) {
+    const steps = splitFlowchartSteps(group.layout);
+    if (steps.length > 1) {
+      return (
+        <div className="flex flex-col items-center gap-0">
+          {steps.map((step, si) => {
+            const tokens = parseLayout(step);
+            return (
+              <Fragment key={si}>
+                <div className="w-full rounded-lg border bg-muted/30 px-4 py-2.5 text-sm leading-7">
+                  {tokens.map((tok, ti) =>
+                    tok.kind === "text" ? (
+                      <Fragment key={ti}>{tok.value}</Fragment>
+                    ) : (
+                      <BlankInput
+                        key={ti}
+                        number={tok.number}
+                        value={(answers[tok.number] as string) ?? ""}
+                        onChange={(v) => onAnswer(tok.number, v)}
+                        maxWords={maxWords}
+                        active={currentQuestion === tok.number}
+                      />
+                    )
+                  )}
+                </div>
+                {si < steps.length - 1 && (
+                  <div className="flex items-center justify-center py-1 text-muted-foreground">
+                    <ChevronDown className="h-5 w-5" />
+                  </div>
+                )}
+              </Fragment>
+            );
+          })}
+        </div>
+      );
+    }
+  }
 
   if (TEXT_INPUT_TYPES.has(group.type) && group.layout) {
     const tokens = parseLayout(group.layout);

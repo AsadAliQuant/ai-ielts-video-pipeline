@@ -273,6 +273,43 @@ body {
     border: 1px solid #E5E7EB;
 }
 
+/* Flowchart completion */
+.flowchart-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    padding: 12px 0;
+}
+
+.flowchart-step {
+    width: 92%;
+    background: #FAFAFA;
+    border: 1.5px solid #CBD5E1;
+    border-radius: 8px;
+    padding: 12px 18px;
+    font-size: 16px;
+    line-height: 1.6;
+    color: #1E293B;
+    text-align: left;
+}
+
+.flowchart-arrow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    height: 32px;
+    color: #475569;
+    font-size: 0;
+    line-height: 0;
+}
+
+.flowchart-arrow svg {
+    width: 22px;
+    height: 32px;
+}
+
 /* Title Card */
 .title-card {
     display: flex;
@@ -456,6 +493,58 @@ def format_blank_layout(layout_str: str, question_numbers: list[int]) -> str:
     return "<br>".join(lines)
 
 
+# SVG downward arrow used between flowchart steps
+_FLOWCHART_ARROW_SVG = (
+    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 22 32">'
+    '<line x1="11" y1="0" x2="11" y2="24" stroke="#475569" stroke-width="2"/>'
+    '<polygon points="4,22 11,32 18,22" fill="#475569"/>'
+    '</svg>'
+)
+
+# Matches ASCII (| / v) and Unicode (│ / ▼) arrow delimiters between steps
+_FLOWCHART_ARROW_RE = re.compile(
+    r"\n\s*[|│]\s*\n\s*[v▼]\s*\n",
+    re.UNICODE,
+)
+
+
+def format_flowchart_layout(layout_str: str, question_numbers: list[int]) -> str:
+    """Format a flow_chart_completion layout into styled step boxes with arrows."""
+    wanted = set(question_numbers)
+
+    def replacer(match):
+        num = int(match.group(1))
+        if num in wanted:
+            return f'<span class="blank-field"><span class="q-badge">{num}</span><span class="blank-line"></span></span>'
+        return match.group(0)
+
+    raw = str(layout_str or "")
+
+    # Split on arrow delimiters: "|" + "v" (or Unicode equivalents)
+    steps = _FLOWCHART_ARROW_RE.split(raw)
+
+    # Fallback: if no arrows found, try double-newline (Step N: style)
+    if len(steps) <= 1:
+        steps = re.split(r"\n{2,}", raw)
+
+    # If still a single chunk, fall back to normal layout rendering
+    if len(steps) <= 1:
+        return format_blank_layout(layout_str, question_numbers)
+
+    arrow_html = f'<div class="flowchart-arrow">{_FLOWCHART_ARROW_SVG}</div>'
+    parts = []
+    for i, step in enumerate(steps):
+        step = step.strip()
+        if not step:
+            continue
+        escaped = html.escape(step)
+        formatted = re.sub(r"\{\s*(\d+)\s*\}", replacer, escaped)
+        parts.append(f'<div class="flowchart-step">{formatted}</div>')
+        if i < len(steps) - 1:
+            parts.append(arrow_html)
+
+    return f'<div class="flowchart-container">{"".join(parts)}</div>'
+
 def render_group_html(group: dict, questions: list[dict], visuals_map: dict[str, Path]) -> str:
     """Render a single question group into HTML."""
     gid = str(group.get("id") or "")
@@ -491,8 +580,13 @@ def render_group_html(group: dict, questions: list[dict], visuals_map: dict[str,
     # Layout text / blanks
     layout = str(group.get("layout", "")).strip()
     if layout:
-        layout_html = format_blank_layout(layout, numbers)
-        out.append(f'<div class="formatted-layout">{layout_html}</div>')
+        gtype = str(group.get("type", ""))
+        if gtype == "flow_chart_completion":
+            layout_html = format_flowchart_layout(layout, numbers)
+            out.append(layout_html)
+        else:
+            layout_html = format_blank_layout(layout, numbers)
+            out.append(f'<div class="formatted-layout">{layout_html}</div>')
 
     # Shared Options Box (Matching / Labelling / Boxed options)
     options = group.get("options", [])
