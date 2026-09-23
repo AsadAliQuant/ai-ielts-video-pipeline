@@ -138,12 +138,18 @@ def get_timestamps(test_dir: Path) -> str:
     return DEFAULT_TIMESTAMPS
 
 
-def build_description_text(test_dir: Path) -> str:
+def build_description_text(test_dir: Path, video_date=None) -> str:
     """Build the complete, formatted YouTube video description string without any AI calls."""
     timestamps = get_timestamps(test_dir)
     start_script = get_start_script()
 
+    date_line = ""
+    if video_date:
+        # Portable day without leading zero (strftime %-d is Linux-only)
+        date_line = f"\U0001F4C5 Test date: {video_date.day} {video_date.strftime('%B %Y')}\n\n"
+
     description = (
+        f"{date_line}"
         "Practice your IELTS Listening test under real exam conditions with this complete practice session (Academic & General Training). "
         "Boost your band score with authentic timing, questions, and an official answer key at the end.\n\n"
         "🎧 For the best test experience, use headphones and write your answers down as you listen.\n\n"
@@ -176,10 +182,11 @@ def build_description_text(test_dir: Path) -> str:
     return description
 
 
-def generate_youtube_description(test_dir: str | Path, output_file: str | Path | None = None) -> str:
+def generate_youtube_description(test_dir: str | Path, output_file: str | Path | None = None,
+                                 video_date=None) -> str:
     """Generate and save the YouTube description to video/youtube_description.txt."""
     test_path = Path(test_dir)
-    desc = build_description_text(test_path)
+    desc = build_description_text(test_path, video_date=video_date)
 
     if output_file:
         out_path = Path(output_file)
