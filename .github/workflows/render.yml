@@ -21,6 +21,9 @@ jobs:
   render:
     runs-on: ubuntu-latest
     timeout-minutes: 90
+    permissions:
+      contents: read    # checkout
+      actions: read     # download the prepare run's test-bundle artifact
 
     steps:
       - uses: actions/checkout@v4
