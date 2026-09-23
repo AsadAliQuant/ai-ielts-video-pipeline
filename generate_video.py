@@ -18,6 +18,7 @@ import os
 import subprocess
 import sys
 import wave
+from datetime import datetime
 from pathlib import Path
 from PIL import Image, ImageDraw
 
@@ -225,7 +226,7 @@ def write_youtube_chapters(test_dir: Path, test_data: dict, timeline: dict,
 
 def generate_video(test_dir: str | Path, fast: bool = False,
                    skip_visuals: bool = False, output_path: str | Path | None = None,
-                   force: bool = False):
+                   force: bool = False, video_date: str | None = None):
     """Main video generation coordinator."""
     test_dir = Path(test_dir)
     test_json = test_dir / "test.json"
@@ -442,7 +443,12 @@ def generate_video(test_dir: str | Path, fast: bool = False,
     print("\n>>> Step 7: Generating YouTube Thumbnail")
     try:
         from generate_thumbnail import generate_thumbnail
-        generate_thumbnail(test_dir)
+        date_text = None
+        if video_date:
+            # Thumbnail badge format: 26/Sep/2026
+            dt = datetime.strptime(video_date, "%Y-%m-%d")
+            date_text = dt.strftime("%d/%b/%Y")
+        generate_thumbnail(test_dir, date_text=date_text)
     except Exception as e:
         print(f"Warning: Thumbnail generation failed: {e}")
 
@@ -457,6 +463,8 @@ if __name__ == "__main__":
     parser.add_argument("--skip-visuals", action="store_true", help="Skip calling visual generation")
     parser.add_argument("--output", help="Custom output MP4 path")
     parser.add_argument("--force", action="store_true", help="Force regenerate cached screens/visuals")
+    parser.add_argument("--video-date", help="Video date as YYYY-MM-DD (used in thumbnail date badge)",
+                        default=None)
 
     args = parser.parse_args()
     generate_video(
@@ -464,5 +472,6 @@ if __name__ == "__main__":
         fast=args.fast,
         skip_visuals=args.skip_visuals,
         output_path=args.output,
-        force=args.force
+        force=args.force,
+        video_date=args.video_date,
     )
