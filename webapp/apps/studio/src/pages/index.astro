@@ -1,0 +1,121 @@
+---
+import Layout from "@/layouts/Layout.astro"
+import { listAllTests } from "@/lib/test-service"
+import { TestCard } from "@/components/studio/TestCard"
+import { Button } from "@workspace/ui/components/button"
+import { Badge } from "@workspace/ui/components/badge"
+import { PlayCircle, Video, Music, FileText, CheckCircle2, Clock } from "lucide-react"
+import { YoutubeIcon } from "@/components/studio/YoutubeIcon"
+
+const tests = await listAllTests()
+
+const totalTests = tests.length
+const totalVideos = tests.filter((t) => t.hasVideo).length
+const totalPublished = tests.filter((t) => t.youtubeId).length
+const totalAudio = tests.filter((t) => t.hasAudio).length
+---
+
+<Layout title="Dashboard | IELTS Video Studio">
+  <div class="space-y-8">
+    {/* Hero Section */}
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 p-6 bg-gradient-to-r from-card to-muted/40 border rounded-3xl shadow-sm">
+      <div class="space-y-1.5">
+        <div class="flex items-center gap-2">
+          <Badge variant="secondary" className="text-xs font-semibold px-2.5 py-0.5">
+            Local Production Studio
+          </Badge>
+          <span className="text-xs text-muted-foreground">• Full IELTS Pipeline</span>
+        </div>
+        <h1 class="text-2xl sm:text-3xl font-extrabold tracking-tight">
+          IELTS Listening Exam Video Pipeline
+        </h1>
+        <p className="text-sm text-muted-foreground max-w-2xl">
+          Generate complete 4-part IELTS exam papers, synthesize realistic dialogue audio, bake dynamic HUD timers onto 1080p screens, and upload directly to YouTube.
+        </p>
+      </div>
+
+      <div class="flex items-center gap-3">
+        <a href="/pipeline">
+          <Button size="lg" className="gap-2 rounded-2xl shadow-lg shadow-primary/25 font-bold">
+            <PlayCircle className="w-5 h-5" />
+            <span>New Pipeline Run</span>
+          </Button>
+        </a>
+      </div>
+    </div>
+
+    {/* Metric Cards */}
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4">
+      <div class="p-4 rounded-2xl bg-card border shadow-sm space-y-1">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span className="text-xs font-medium">Total Test Papers</span>
+          <FileText className="w-4 h-4 text-primary" />
+        </div>
+        <p className="text-2xl font-bold">{totalTests}</p>
+        <p className="text-[11px] text-muted-foreground">Generated tests in archive</p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-card border shadow-sm space-y-1">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span className="text-xs font-medium">Audio Synthesized</span>
+          <Music className="w-4 h-4 text-primary" />
+        </div>
+        <p className="text-2xl font-bold">{totalAudio}</p>
+        <p className="text-[11px] text-muted-foreground">Fish Audio TTS ready</p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-card border shadow-sm space-y-1">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span className="text-xs font-medium">Videos Rendered</span>
+          <Video className="w-4 h-4 text-primary" />
+        </div>
+        <p className="text-2xl font-bold">{totalVideos}</p>
+        <p className="text-[11px] text-muted-foreground">1080p MP4 exam videos</p>
+      </div>
+
+      <div class="p-4 rounded-2xl bg-card border shadow-sm space-y-1">
+        <div className="flex items-center justify-between text-muted-foreground">
+          <span className="text-xs font-medium">YouTube Uploads</span>
+          <YoutubeIcon className="w-4 h-4 text-red-500" />
+        </div>
+        <p className="text-2xl font-bold">{totalPublished}</p>
+        <p className="text-[11px] text-muted-foreground">Published live videos</p>
+      </div>
+    </div>
+
+    {/* Tests Grid */}
+    <div class="space-y-4">
+      <div class="flex items-center justify-between">
+        <div>
+          <h2 class="text-lg font-bold">Exam Tests Archive</h2>
+          <p class="text-xs text-muted-foreground">All tests generated under `tests/`</p>
+        </div>
+        <span class="text-xs font-mono text-muted-foreground bg-muted px-2.5 py-1 rounded-lg">
+          {tests.length} test folders
+        </span>
+      </div>
+
+      {tests.length === 0 ? (
+        <div class="p-12 text-center border-2 border-dashed rounded-3xl space-y-3 bg-muted/10">
+          <FileText class="w-10 h-10 text-muted-foreground mx-auto" />
+          <h3 class="text-base font-semibold">No tests generated yet</h3>
+          <p class="text-xs text-muted-foreground max-w-sm mx-auto">
+            Click New Pipeline Run to generate your first IELTS listening exam video.
+          </p>
+          <a href="/pipeline">
+            <Button size="sm" class="gap-2 rounded-xl mt-2">
+              <PlayCircle class="w-4 h-4" />
+              <span>Start Generator</span>
+            </Button>
+          </a>
+        </div>
+      ) : (
+        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+          {tests.map((test) => (
+            <TestCard client:load test={test} />
+          ))}
+        </div>
+      )}
+    </div>
+  </div>
+</Layout>

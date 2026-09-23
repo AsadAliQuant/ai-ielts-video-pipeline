@@ -55,7 +55,13 @@ python batch_generate.py 1 --chatgpt --upload --fast     # full pipeline via bat
 python batch_generate.py 3                               # batch generate 3 full tests (Stages 1..3)
 python batch_generate.py 5 --band 7.5 --skip-verify      # 5 tests, band 7.5, fast Stage 1
 python batch_generate.py 2 --stage 1                     # generate 2 test papers only
-python batch_generate.py 3 --dry-run                     # preview planned execution commands
+```
+
+WebUI Studio (Astro + shadcn/ui):
+```bash
+python webui.py                                              # Launch WebUI & open browser at http://localhost:4321
+# OR double click run_studio.bat
+# OR from webapp/: npm run studio
 ```
 
 See `CHATGPT_IMAGE_YOUTUBE_PIPELINE.md` for the full terminal workflow guide.

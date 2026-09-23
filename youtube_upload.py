@@ -73,38 +73,80 @@ def build_metadata(test_dir: Path, custom_title: str | None = None, upload_date:
     return title, description
 
 
-def upload(test_dir: Path, custom_title: str | None = None):
+DEFAULT_TAGS = [
+    "IELTS",
+    "IELTS listening",
+    "IELTS test",
+    "IELTS practice",
+    "IELTS prep",
+    "IELTS 2026",
+    "IELTS listening practice test",
+    "IELTS listening test with answers",
+    "recent actual IELTS listening test",
+    "full length IELTS listening test",
+    "IELTS listening mock test",
+    "IELTS listening band 9",
+    "real exam IELTS listening",
+    "daily IELTS listening practice",
+    "IELTS listening audio with answers",
+    "IELTS academic listening test",
+    "Cambridge IELTS listening",
+]
+
+
+def parse_publish_at(publish_at_str: str) -> tuple[str, datetime]:
+    """Parse an ISO 8601 / RFC 3339 string into (rfc3339_string, datetime_obj)."""
+    dt = datetime.fromisoformat(publish_at_str)
+    if dt.tzinfo is None:
+        dt = dt.astimezone()
+    return dt.isoformat(), dt
+
+
+def upload(test_dir: Path, custom_title: str | None = None, publish_at: str | None = None, notify_subscribers: bool = False):
     video_path = test_dir / "video" / f"{test_dir.name}.mp4"
     if not video_path.exists():
         sys.exit(f"No rendered video found at {video_path} -- run generate_video.py first.")
 
-    title, description = build_metadata(test_dir, custom_title=custom_title)
+    upload_date = None
+    publish_at_rfc3339 = None
+    if publish_at:
+        publish_at_rfc3339, upload_date = parse_publish_at(publish_at)
+
+    title, description = build_metadata(test_dir, custom_title=custom_title, upload_date=upload_date)
     privacy = os.environ.get("YOUTUBE_PRIVACY", "unlisted")
+    if publish_at_rfc3339:
+        privacy = "private"
 
     youtube = build_youtube_client()
+    status_dict = {
+        "privacyStatus": privacy,
+        "selfDeclaredMadeForKids": False,
+        "containsSyntheticMedia": False,
+    }
+    if publish_at_rfc3339:
+        status_dict["publishAt"] = publish_at_rfc3339
+
     body = {
         "snippet": {
             "title": title,
             "description": description,
-            "tags": [
-                "IELTS",
-                "IELTS Listening",
-                "IELTS Practice Test",
-                "IELTS 2026",
-                "Band 8",
-                "Band 9",
-                "IELTS Listening Test",
-                "English Test",
-                "IELTS Preparation",
-            ],
+            "tags": DEFAULT_TAGS,
             "categoryId": "27",  # Education
+            "defaultLanguage": "en-US",
+            "defaultAudioLanguage": "en-US",
         },
-        "status": {"privacyStatus": privacy, "selfDeclaredMadeForKids": False},
+        "status": status_dict,
     }
     media = MediaFileUpload(str(video_path), chunksize=-1, resumable=True, mimetype="video/mp4")
 
-    print(f"Uploading {video_path} as '{title}' ({privacy}) ...")
-    request = youtube.videos().insert(part="snippet,status", body=body, media_body=media)
+    sched_msg = f" scheduled for {publish_at_rfc3339}" if publish_at_rfc3339 else ""
+    print(f"Uploading {video_path} as '{title}' ({privacy}{sched_msg}) ...")
+    request = youtube.videos().insert(
+        part="snippet,status",
+        body=body,
+        media_body=media,
+        notifySubscribers=notify_subscribers,
+    )
 
     response = None
     while response is None:
@@ -147,5 +189,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("test_dir", help="Path to test directory (e.g. tests/test_007)")
     parser.add_argument("--title", help="Override YouTube video title", default=None)
+    parser.add_argument("--publish-at", help="Scheduled publish time in RFC 3339 / ISO format (e.g. 2026-09-20T08:00:00+05:00)", default=None)
+    parser.add_argument("--notify-subscribers", action="store_true", default=False, help="Publish to subscribers feed and notify subscribers (default: False)")
     args = parser.parse_args()
-    upload(Path(args.test_dir), custom_title=args.title)
+    upload(Path(args.test_dir), custom_title=args.title, publish_at=args.publish_at, notify_subscribers=args.notify_subscribers)

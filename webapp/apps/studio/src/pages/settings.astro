@@ -1,0 +1,198 @@
+---
+import Layout from "@/layouts/Layout.astro"
+import { checkSystemHealth } from "@/lib/system-service"
+import { Badge } from "@workspace/ui/components/badge"
+import { Card, CardHeader, CardTitle, CardDescription, CardContent } from "@workspace/ui/components/card"
+import { CheckCircle2, AlertCircle, Terminal, Video, Key, Sparkles, ExternalLink } from "lucide-react"
+import { YoutubeIcon } from "@/components/studio/YoutubeIcon"
+
+const health = await checkSystemHealth()
+---
+
+<Layout title="System Diagnostics | IELTS Video Studio">
+  <div class="space-y-6 max-w-4xl">
+    <div>
+      <h1 class="text-2xl font-extrabold tracking-tight">System & Credentials Diagnostics</h1>
+      <p class="text-xs text-muted-foreground mt-1">
+        Verify your local environment prerequisites and API credentials configured in `.env`.
+      </p>
+    </div>
+
+    {/* Prerequisites */}
+    <Card class="rounded-2xl border">
+      <CardHeader class="pb-3 border-b">
+        <CardTitle class="text-base font-bold flex items-center gap-2">
+          <Terminal class="w-4 h-4 text-primary" />
+          <span>Local CLI & Tooling Prerequisites</span>
+        </CardTitle>
+        <CardDescription class="text-xs">
+          Executables required to run video generation, audio playback, and screen captures.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="p-6 space-y-4">
+        {/* Python */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">Python 3 Environment</p>
+            <p class="text-[11px] font-mono text-muted-foreground">
+              {health.python.available ? health.python.version : health.python.error}
+            </p>
+          </div>
+          {health.python.available ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Available</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Missing</span>
+            </Badge>
+          )}
+        </div>
+
+        {/* FFmpeg */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">FFmpeg Video Muxer</p>
+            <p class="text-[11px] font-mono text-muted-foreground">
+              {health.ffmpeg.available ? health.ffmpeg.version : health.ffmpeg.error}
+            </p>
+          </div>
+          {health.ffmpeg.available ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Available</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Missing</span>
+            </Badge>
+          )}
+        </div>
+
+        {/* Playwright */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">Playwright Chromium (Exam Screen Renderer)</p>
+            <p class="text-[11px] font-mono text-muted-foreground">
+              {health.playwright.available ? "Playwright installed" : health.playwright.error}
+            </p>
+          </div>
+          {health.playwright.available ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Installed</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Run: playwright install chromium</span>
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+
+    {/* API Credentials */}
+    <Card class="rounded-2xl border">
+      <CardHeader class="pb-3 border-b">
+        <CardTitle class="text-base font-bold flex items-center gap-2">
+          <Key class="w-4 h-4 text-primary" />
+          <span>API Credentials (.env)</span>
+        </CardTitle>
+        <CardDescription class="text-xs">
+          Keys required for LLM generation, Fish Audio TTS synthesis, and YouTube publishing.
+        </CardDescription>
+      </CardHeader>
+      <CardContent class="p-6 space-y-4">
+        {/* Gemini */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">Google Gemini API Keys (GEMINI_API_KEYS)</p>
+            <p class="text-[11px] text-muted-foreground">
+              {health.envVars.geminiKeyConfigured
+                ? `${health.envVars.geminiKeyCount} key(s) configured for rotation`
+                : "No Gemini API keys found in .env"}
+            </p>
+          </div>
+          {health.envVars.geminiKeyConfigured ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Configured</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Missing</span>
+            </Badge>
+          )}
+        </div>
+
+        {/* Fish Audio */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">Fish Audio API Key (FISH_AUDIO)</p>
+            <p class="text-[11px] text-muted-foreground">
+              {health.envVars.fishAudioKeyConfigured ? "Fish Audio key configured" : "Missing key"}
+            </p>
+          </div>
+          {health.envVars.fishAudioKeyConfigured ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Configured</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Missing</span>
+            </Badge>
+          )}
+        </div>
+
+        {/* NVIDIA NIM */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold">NVIDIA NIM Key (NVIDIA_API_KEY)</p>
+            <p class="text-[11px] text-muted-foreground">Optional fallback LLM provider</p>
+          </div>
+          {health.envVars.nvidiaKeyConfigured ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Configured</span>
+            </Badge>
+          ) : (
+            <Badge variant="outline" class="text-xs">Optional</Badge>
+          )}
+        </div>
+
+        {/* YouTube OAuth */}
+        <div class="flex items-center justify-between p-3 rounded-xl bg-muted/30 border">
+          <div class="space-y-0.5">
+            <p class="text-xs font-semibold flex items-center gap-1.5">
+              <YoutubeIcon className="w-4 h-4 text-red-500" />
+              <span>YouTube Data API v3 OAuth</span>
+            </p>
+            <p class="text-[11px] text-muted-foreground">
+              {health.envVars.youtubeOAuthConfigured && health.envVars.youtubeRefreshTokenConfigured
+                ? "YouTube OAuth Client & Refresh Token ready"
+                : "Run `python get_youtube_token.py` to mint token"}
+            </p>
+          </div>
+          {health.envVars.youtubeOAuthConfigured && health.envVars.youtubeRefreshTokenConfigured ? (
+            <Badge class="bg-green-500/10 text-green-600 dark:text-green-400 border-green-500/20 text-xs">
+              <CheckCircle2 class="w-3.5 h-3.5 mr-1" />
+              <span>Ready</span>
+            </Badge>
+          ) : (
+            <Badge variant="destructive" class="text-xs">
+              <AlertCircle class="w-3.5 h-3.5 mr-1" />
+              <span>Setup Required</span>
+            </Badge>
+          )}
+        </div>
+      </CardContent>
+    </Card>
+  </div>
+</Layout>

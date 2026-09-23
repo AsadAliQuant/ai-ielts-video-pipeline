@@ -186,7 +186,7 @@ class LLM:
     """
 
     def __init__(self, provider, model, gemini_model=DEFAULT_GEMINI_MODEL,
-                 temperature=0.7, verbose=True, nvidia_schema="auto"):
+                 temperature=0.7, verbose=True, nvidia_schema="auto", key_offset=0):
         load_dotenv(ROOT / ".env")
         nvidia_key = os.getenv("NVIDIA_API_KEY", "").strip()
         gemini_keys = _load_gemini_keys()
@@ -218,7 +218,7 @@ class LLM:
         self.temperature = temperature
         self.verbose = verbose
         self.calls = 0
-        self.backend_index = 0         # sticks on whichever backend last worked
+        self.backend_index = (key_offset) % len(self.backends) if self.backends else 0         # sticks on whichever backend last worked
 
     @property
     def model(self):
@@ -1729,6 +1729,10 @@ def parse_args(argv=None):
                         help="Gemini model id, used for --provider gemini and for the "
                              "NVIDIA->Gemini fallback")
     parser.add_argument("--out", default="tests", help="output folder (default: tests)")
+    parser.add_argument("--test-dir", default=None,
+                        help="explicit output directory (e.g. tests/test_011), overrides --out")
+    parser.add_argument("--key-offset", type=int, default=0,
+                        help="starting index for rotating API keys to spread load")
     parser.add_argument("--temperature", type=float, default=0.7)
     parser.add_argument("--nvidia-schema", default="auto",
                         choices=["auto", "json_schema", "guided_json", "off"],
@@ -1747,7 +1751,8 @@ def main(argv=None):
     args = parse_args(argv)
     system = load_system_prompt()
     llm = LLM(args.provider, args.model, gemini_model=args.gemini_model,
-              temperature=args.temperature, nvidia_schema=args.nvidia_schema)
+              temperature=args.temperature, nvidia_schema=args.nvidia_schema,
+              key_offset=args.key_offset)
 
     print("Generating an IELTS Listening test ({}, band {}) with provider={} model={}\n".format(
         args.difficulty, args.band, args.provider,
@@ -1768,8 +1773,11 @@ def main(argv=None):
             state["error"] = str(exc)
             test["verification"] = state
 
-    out_dir = next_output_dir(Path(args.out) if Path(args.out).is_absolute()
-                              else ROOT / args.out)
+    if args.test_dir:
+        out_dir = Path(args.test_dir).resolve() if Path(args.test_dir).is_absolute() else ROOT / args.test_dir
+    else:
+        out_dir = next_output_dir(Path(args.out) if Path(args.out).is_absolute()
+                                  else ROOT / args.out)
     written = write_outputs(test, out_dir, llm=llm)
     print_summary(test, out_dir, written, llm)
     return 0
