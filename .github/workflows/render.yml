@@ -13,6 +13,9 @@ on:
       prep_run_id:
         description: "Prepare run id whose test-bundle artifact to restore"
         required: true
+      video_date:
+        description: "Video date as YYYY-MM-DD; used in title, description, thumbnail, and YouTube scheduled publish"
+        required: true
 
 jobs:
   render:
@@ -49,15 +52,15 @@ jobs:
           path: ${{ inputs.test_dir }}
 
       - name: Stage 3 - render video (visuals supplied)
-        run: python generate_video.py "${{ inputs.test_dir }}" --fast --skip-visuals
+        run: python generate_video.py "${{ inputs.test_dir }}" --fast --skip-visuals --video-date "${{ inputs.video_date }}"
 
-      - name: Stage 4 - upload to YouTube
+      - name: Stage 4 - upload to YouTube (scheduled)
         env:
           YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY }}
-        run: python youtube_upload.py "${{ inputs.test_dir }}"
+        run: python youtube_upload.py "${{ inputs.test_dir }}" --date "${{ inputs.video_date }}" --publish-at "${{ inputs.video_date }}T09:00:00Z"
 
       - name: Upload run artifacts on failure
         if: failure()
