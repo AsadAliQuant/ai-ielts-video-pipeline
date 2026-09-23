@@ -68,7 +68,7 @@ def build_metadata(test_dir: Path, custom_title: str | None = None, upload_date:
     if len(title) > 100:
         title = title[:97] + "..."
 
-    description = generate_youtube_description(test_dir)
+    description = generate_youtube_description(test_dir, video_date=upload_date)
 
     return title, description
 
@@ -102,15 +102,18 @@ def parse_publish_at(publish_at_str: str) -> tuple[str, datetime]:
     return dt.isoformat(), dt
 
 
-def upload(test_dir: Path, custom_title: str | None = None, publish_at: str | None = None, notify_subscribers: bool = False):
+def upload(test_dir: Path, custom_title: str | None = None, publish_at: str | None = None,
+           notify_subscribers: bool = False, video_date: datetime | None = None):
     video_path = test_dir / "video" / f"{test_dir.name}.mp4"
     if not video_path.exists():
         sys.exit(f"No rendered video found at {video_path} -- run generate_video.py first.")
 
-    upload_date = None
+    upload_date = video_date
     publish_at_rfc3339 = None
     if publish_at:
-        publish_at_rfc3339, upload_date = parse_publish_at(publish_at)
+        publish_at_rfc3339, parsed_date = parse_publish_at(publish_at)
+        if upload_date is None:
+            upload_date = parsed_date
 
     title, description = build_metadata(test_dir, custom_title=custom_title, upload_date=upload_date)
     privacy = os.environ.get("YOUTUBE_PRIVACY", "unlisted")
@@ -189,7 +192,17 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("test_dir", help="Path to test directory (e.g. tests/test_007)")
     parser.add_argument("--title", help="Override YouTube video title", default=None)
+    parser.add_argument("--date", help="Video date as YYYY-MM-DD (used in title, description and thumbnail; overrides the date derived from --publish-at)", default=None)
     parser.add_argument("--publish-at", help="Scheduled publish time in RFC 3339 / ISO format (e.g. 2026-09-20T08:00:00+05:00)", default=None)
     parser.add_argument("--notify-subscribers", action="store_true", default=False, help="Publish to subscribers feed and notify subscribers (default: False)")
     args = parser.parse_args()
-    upload(Path(args.test_dir), custom_title=args.title, publish_at=args.publish_at, notify_subscribers=args.notify_subscribers)
+
+    video_date = None
+    if args.date:
+        try:
+            video_date = datetime.strptime(args.date, "%Y-%m-%d")
+        except ValueError:
+            sys.exit(f"Invalid --date {args.date!r}: expected YYYY-MM-DD")
+
+    upload(Path(args.test_dir), custom_title=args.title, publish_at=args.publish_at,
+           notify_subscribers=args.notify_subscribers, video_date=video_date)
