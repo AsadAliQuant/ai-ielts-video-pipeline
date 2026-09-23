@@ -60,7 +60,7 @@ jobs:
           YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
           YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
           YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY }}
-        run: python youtube_upload.py "${{ inputs.test_dir }}" --date "${{ inputs.video_date }}" --publish-at "${{ inputs.video_date }}T09:00:00Z"
+        run: python youtube_upload.py "${{ inputs.test_dir }}" --date "${{ inputs.video_date }}" --publish-at "${{ inputs.video_date }}T03:00:00Z"
 
       - name: Upload run artifacts on failure
         if: failure()
