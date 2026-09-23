@@ -1,0 +1,68 @@
+name: Render + Upload IELTS Video
+
+# Stage 3+4 of the pipeline. Triggered after the image handoff: the visuals
+# (tests/<dir>/visuals/*.png) are already committed to the repo, and the
+# test bundle (test.json + audio) is restored from the prepare run's artifact.
+# Renders with --skip-visuals so no image API is called, then uploads to YouTube.
+on:
+  workflow_dispatch:
+    inputs:
+      test_dir:
+        description: "Test dir, e.g. tests/test_007"
+        required: true
+      prep_run_id:
+        description: "Prepare run id whose test-bundle artifact to restore"
+        required: true
+
+jobs:
+  render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: pip install -r requirements.txt
+
+      - name: Install Playwright Chromium
+        run: playwright install --with-deps chromium
+
+      - name: Install ffmpeg and emoji font
+        # Inter is bundled in assets/fonts; only color emoji comes from the OS
+        # (the title card uses the clock and memo emoji).
+        run: sudo apt-get update && sudo apt-get install -y ffmpeg fonts-noto-color-emoji
+
+      - name: Verify bundled fonts load
+        run: python -c "import fonts; fonts.selftest()"
+
+      - name: Restore test bundle from prepare run
+        uses: actions/download-artifact@v4
+        with:
+          name: test-bundle-${{ inputs.prep_run_id }}
+          run-id: ${{ inputs.prep_run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: ${{ inputs.test_dir }}
+
+      - name: Stage 3 - render video (visuals supplied)
+        run: python generate_video.py "${{ inputs.test_dir }}" --fast --skip-visuals
+
+      - name: Stage 4 - upload to YouTube
+        env:
+          YOUTUBE_CLIENT_ID: ${{ secrets.YOUTUBE_CLIENT_ID }}
+          YOUTUBE_CLIENT_SECRET: ${{ secrets.YOUTUBE_CLIENT_SECRET }}
+          YOUTUBE_REFRESH_TOKEN: ${{ secrets.YOUTUBE_REFRESH_TOKEN }}
+          YOUTUBE_PRIVACY: ${{ secrets.YOUTUBE_PRIVACY }}
+        run: python youtube_upload.py "${{ inputs.test_dir }}"
+
+      - name: Upload run artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: failed-render-${{ github.run_id }}
+          path: ${{ inputs.test_dir }}
+          retention-days: 7
