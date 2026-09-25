@@ -58,6 +58,58 @@ jobs:
           github-token: ${{ secrets.GITHUB_TOKEN }}
           path: ${{ inputs.test_dir }}
 
+      - name: Deduplicate visual ids
+        # The test generator occasionally emits the same visual id in more than
+        # one part (e.g. two "v1" visuals). The pipeline maps visuals by id to
+        # tests/<dir>/visuals/<id>.png, so duplicates collide and question
+        # groups would show the wrong image. Rename later duplicates (v1 -> v2
+        # -> ...) and repoint the matching question group in the same part.
+        run: |
+          python - <<'EOF'
+          import json, re
+          from pathlib import Path
+          p = Path("${{ inputs.test_dir }}") / "test.json"
+          data = json.loads(p.read_text(encoding="utf-8"))
+          seen = {}
+          renamed = []
+          def next_id(vid):
+              m = re.match(r"^(.*?)(\d+)$", vid)
+              base, n = (m.group(1), int(m.group(2))) if m else (vid + "-", 1)
+              cand = f"{base}{n + 1}"
+              while cand in seen:
+                  n += 1
+                  cand = f"{base}{n + 1}"
+              return cand
+          for part in data.get("parts", []):
+              for v in part.get("visuals", []):
+                  vid = str(v.get("id") or "").strip()
+                  if not vid:
+                      continue
+                  if vid in seen:
+                      new_vid = next_id(vid)
+                      qs = set(v.get("questions") or [])
+                      for g in part.get("question_groups", []):
+                          if str(g.get("visual_id") or "") == vid:
+                              gf, gt = g.get("from"), g.get("to")
+                              try:
+                                  rng = set(range(int(gf), int(gt) + 1)) if gf is not None and gt is not None else set()
+                              except (TypeError, ValueError):
+                                  rng = set()
+                              if qs & rng:
+                                  g["visual_id"] = new_vid
+                                  break
+                      v["id"] = new_vid
+                      renamed.append((vid, new_vid))
+                      seen[new_vid] = True
+                  else:
+                      seen[vid] = True
+          if renamed:
+              p.write_text(json.dumps(data, indent=1, ensure_ascii=False), encoding="utf-8")
+              print("renamed duplicate visual ids:", renamed)
+          else:
+              print("visual ids unique, no changes")
+          EOF
+
       - name: Stage 3 - render video (visuals supplied)
         run: python generate_video.py "${{ inputs.test_dir }}" --fast --skip-visuals --video-date "${{ inputs.video_date }}"
 
