@@ -27,7 +27,7 @@ jobs:
     timeout-minutes: 90
     permissions:
       contents: read    # checkout
-      actions: read     # download the prepare run's test-bundle artifact
+      actions: write    # download the prepare run's test-bundle artifact + delete artifacts after upload
 
     steps:
       - uses: actions/checkout@v4
@@ -128,3 +128,26 @@ jobs:
           name: failed-render-${{ github.run_id }}
           path: ${{ inputs.test_dir }}
           retention-days: 7
+
+      - name: Delete Actions artifacts (free storage)
+        # The video is now uploaded and scheduled on YouTube, so the Actions
+        # artifacts have served their purpose. Delete them so the 0.5 GB
+        # included Actions storage never fills up. Runs only when everything
+        # above succeeded - on failure the artifacts are kept for debugging.
+        if: success()
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          REPO="${{ github.repository }}"
+          # 1) Delete this run's own artifacts (none expected on success).
+          for id in $(gh api "repos/$REPO/actions/runs/${{ github.run_id }}/artifacts" --paginate -q '.artifacts[].id'); do
+            gh api -X DELETE "repos/$REPO/actions/artifacts/$id" >/dev/null && echo "deleted render-run artifact $id"
+          done
+          # 2) Delete the prepare run's test bundle - no longer needed once the video is on YouTube.
+          BID=$(gh api "repos/$REPO/actions/runs/${{ inputs.prep_run_id }}/artifacts" -q '.artifacts[] | select(.name == "test-bundle-${{ inputs.prep_run_id }}") | .id' | head -n 1)
+          if [ -n "${BID:-}" ]; then
+            gh api -X DELETE "repos/$REPO/actions/artifacts/$BID" >/dev/null && echo "deleted prepare bundle artifact $BID"
+          else
+            echo "prepare bundle artifact already gone"
+          fi
