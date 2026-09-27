@@ -78,7 +78,7 @@ jobs:
             ${{ steps.testdir.outputs.dir }}/test.json
             ${{ steps.testdir.outputs.dir }}/audio
             ${{ steps.testdir.outputs.dir }}/handoff.json
-          retention-days: 7
+          retention-days: 3 # auto-deleted by the render run after upload; short fallback so leftovers expire fast
 
       - name: Upload run artifacts on failure
         if: failure() && steps.testdir.outputs.dir != ''
