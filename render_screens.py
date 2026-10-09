@@ -705,7 +705,7 @@ def render_title_screen(test_data: dict) -> str:
 
     content = f"""
     <div class="title-card">
-        <div class="brand-badge">Official Format &bull; Academic / General</div>
+        <div class="brand-badge">Official Format</div>
         <h1 class="main-test-title">{html.escape(title)}</h1>
         
         <div class="test-meta-pills">
