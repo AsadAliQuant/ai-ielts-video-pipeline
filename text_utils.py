@@ -10,7 +10,7 @@ from __future__ import annotations
 import re
 import unicodedata
 
-DEFAULT_TITLE = "IELTS Academic Listening Practice Test"
+DEFAULT_TITLE = "IELTS Listening Practice Test"
 
 
 def norm(text):
@@ -45,12 +45,13 @@ _SEPARATOR_HEAD = re.compile(r"^[\s\-\u2013\u2014|,:;\)\]]+")
 
 
 def clean_title(title: str | None) -> str:
-    """Strip target-band artifacts from a test title.
+    """Strip target-band artifacts and the "Academic" qualifier from a test title.
 
     The band is an internal generation parameter and must never reach a viewer,
     but the model writes it into the title anyway (tests/test_009-012 all say
-    "IELTS Listening Practice Test - Academic 7.0"). Sanitizing here means
-    already-generated tests render clean without regeneration.
+    "IELTS Listening Practice Test - Academic 7.0"). The "Academic" word is
+    dropped from all viewer-facing titles per the 2026-10-09 request. Sanitizing
+    here means already-generated tests render clean without regeneration.
     """
     text = (title or "").strip()
     if not text:
@@ -58,6 +59,9 @@ def clean_title(title: str | None) -> str:
 
     for pattern in _BAND_PATTERNS:
         text = pattern.sub(" ", text)
+
+    # Drop the "Academic" qualifier wherever it appears as a standalone word.
+    text = re.sub(r"(?i)\bacademic\b", " ", text)
 
     text = re.sub(r"\s{2,}", " ", text).strip()
     text = _SEPARATOR_TAIL.sub("", text)
