@@ -737,7 +737,7 @@ def generate_blueprint(llm, system, args):
         "The band drives difficulty ONLY. The \"title\" field must not "
         "contain the band, the word \"band\", or any difficulty number - "
         "it is never shown to candidates. Use a clean title such as "
-        '''"IELTS Academic Listening Practice Test".\n\n'''
+        '''"IELTS Listening Practice Test".\n\n'''
         "{schema}"
     ).format(
         difficulty=args.difficulty,
